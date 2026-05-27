@@ -240,13 +240,16 @@ def make_gif(u_m: np.ndarray, outpath: str, n_frames: int = 40,
     Draws the rattle polytope so the viewer sees where the centre travels.
     Returns (outpath, rattle_mm).
     """
-    best_fwd_m, best_dq_fwd, best_th = 0.0, np.zeros(3), 0.0
+    # animate along the MAX peak-to-peak RANGE (diameter) axis, not the max
+    # forward-reach axis — the two differ for asymmetric (offset) polytopes.
+    best_range, best_th = 0.0, 0.0
     for th in np.linspace(0, np.pi, 72):
-        v, dq = lp_rattle(u_m, th)
-        if v > best_fwd_m:
-            best_fwd_m, best_dq_fwd, best_th = v, dq, th
-
-    bwd_m, best_dq_bwd = lp_rattle(u_m, best_th + np.pi)
+        f, _ = lp_rattle(u_m, th)
+        b, _ = lp_rattle(u_m, th + np.pi)
+        if f + b > best_range:
+            best_range, best_th = f + b, th
+    best_fwd_m, best_dq_fwd = lp_rattle(u_m, best_th)
+    bwd_m,      best_dq_bwd = lp_rattle(u_m, best_th + np.pi)
     rattle_mm = (best_fwd_m + bwd_m) * 1000
 
     polytope = rattle_polytope_2d(u_m, nd=180)
@@ -327,12 +330,14 @@ def make_keyframe_strip(u_m: np.ndarray, outpath: str,
         label = "Rotation"
         unit  = f"{(fwd_m+bwd_m)*1e6:.1f} µrad range"
     else:
-        best_fwd_m, dq_fwd, best_th = 0.0, np.zeros(3), 0.0
+        best_range, best_th = 0.0, 0.0
         for th in np.linspace(0, np.pi, 72):
-            v, dq = lp_rattle(u_m, th)
-            if v > best_fwd_m:
-                best_fwd_m, dq_fwd, best_th = v, dq, th
-        bwd_m, dq_bwd = lp_rattle(u_m, best_th + np.pi)
+            f, _ = lp_rattle(u_m, th)
+            b, _ = lp_rattle(u_m, th + np.pi)
+            if f + b > best_range:
+                best_range, best_th = f + b, th
+        best_fwd_m, dq_fwd = lp_rattle(u_m, best_th)
+        bwd_m,      dq_bwd = lp_rattle(u_m, best_th + np.pi)
         label = "Translation"
         unit  = f"{(best_fwd_m+bwd_m)*1e3:.2f} mm range"
 
@@ -468,65 +473,87 @@ def figure_mc_dashboard(rattles_mm: np.ndarray) -> str:
     return base64.b64encode(buf.getvalue()).decode()
 
 
-def figure_partial_measurement(rattles_all: np.ndarray, u_ref: np.ndarray) -> str:
+def figure_partial_measurement(rattles_all: np.ndarray, u_ref=None) -> str:
     """
-    Show rattle CDFs for k = 0, 1, 2, 4 measured adjacent supports.
+    §8 figure (peak-to-peak range metric, n=1 wall displacement):
+      Left  — the rattle-range distribution. Measuring ALL 9 gaps collapses the
+              uncertainty to ONE value drawn from this distribution: most likely
+              near the mode (~2.5 mm), never 0, and at most the 3.09 mm ceiling.
+      Right — conditional P95 vs number of support gaps measured, for measured
+              values that are centred (the assembly target = the worst case →
+              flat) vs a typical random draw (declines only slowly). Shows that
+              measurement narrows the EXPECTED value, not the conservative bound,
+              and that one sector landed (k=1) barely moves it.
     Returns base64 PNG.
     """
-    fig, axes = plt.subplots(1, 2, figsize=(13, 5.5), facecolor="white")
-    fig.subplots_adjust(left=0.07, right=0.97, top=0.88, bottom=0.12, wspace=0.32)
-    ax_cdf, ax_bar = axes
+    fig, (ax_d, ax_k) = plt.subplots(1, 2, figsize=(13, 5.5), facecolor="white")
+    fig.subplots_adjust(left=0.07, right=0.97, top=0.85, bottom=0.13, wspace=0.27)
 
-    colours = {0: "#2b5797", 1: "#cc8800", 2: "#228822", 4: "#cc2200", 9: "#111111"}
-    results: dict[int, np.ndarray] = {0: rattles_all}
+    # ── Left: the range distribution (what measurement "reveals") ──
+    r = rattles_all
+    h, e = np.histogram(r, bins=50)
+    mode = float(0.5 * (e[h.argmax()] + e[h.argmax() + 1]))
+    med  = float(np.median(r))
+    q95  = float(np.percentile(r, 95))
+    ceiling = max_rattle_mm(np.zeros(N), nd=72)
+    ax_d.hist(r, bins=50, color="#2b5797", alpha=0.75, edgecolor="white", lw=0.4)
+    for x, c, lab in [(mode, "#228822", f"mode {mode:.2f}"),
+                      (med,  "#1a6ea8", f"median {med:.2f}"),
+                      (q95,  "#cc8800", f"P95 {q95:.2f}"),
+                      (ceiling, "#cc2200", f"ceiling {ceiling:.2f}")]:
+        ax_d.axvline(x, color=c, lw=2, ls="--", label=lab)
+    ax_d.set_xlabel("Peak-to-peak rattle range (mm)", fontsize=10)
+    ax_d.set_ylabel(f"Count  (n = {len(r):,})", fontsize=10)
+    ax_d.set_title("Measuring all 9 gaps reveals ONE value from this\n"
+                   "distribution — most likely near the mode, never 0",
+                   fontsize=9.5, color="#1a3a6e")
+    ax_d.legend(fontsize=8.5, frameon=False)
+    ax_d.spines[["top", "right"]].set_visible(False)
 
-    rng = np.random.default_rng(42)
-
-    for k in [1, 2, 4]:
-        fixed_idx = list(range(k))
-        r_k = np.zeros(2000)
-        for s in range(2000):
-            u = rng.uniform(-DELTA_M, DELTA_M, N)
-            for i in fixed_idx:
-                u[i] = u_ref[i]
-            r_k[s] = max_rattle_mm(u, nd=24)
-        results[k] = r_k
-    # k=9: deterministic
-    results[9] = np.array([max_rattle_mm(u_ref, nd=72)])
-
-    p95_vals = {k: float(np.percentile(v, 95)) if len(v) > 1 else float(v[0])
-                for k, v in results.items()}
-
-    for k, r in sorted(results.items()):
-        if len(r) == 1:
-            ax_cdf.axvline(r[0], color=colours[k], lw=2,
-                           label=f"k = {k} (all measured): {r[0]:.2f} mm")
-            continue
-        s = np.sort(r)
-        p = np.linspace(0, 100, len(s))
-        ax_cdf.plot(s, p, "-", color=colours[k], lw=2,
-                    label=f"k = {k} supports fixed  (P95 = {p95_vals[k]:.2f} mm)")
-
-    ax_cdf.set_xlabel("Rattle range (mm)", fontsize=10)
-    ax_cdf.set_ylabel("Percentile", fontsize=10)
-    ax_cdf.set_title("Rattle CDF vs number of supports measured\n"
-                     "(measured = adjacent supports 0 … k−1)", fontsize=9.5, color="#1a3a6e")
-    ax_cdf.legend(fontsize=8.5, frameon=False)
-    ax_cdf.set_ylim(0, 100)
-    ax_cdf.spines[["top", "right"]].set_visible(False)
-
-    # Bar chart: P95 reduction
-    ks = sorted(p95_vals.keys())
-    bar_c = [colours[k] for k in ks]
-    ax_bar.bar(ks, [p95_vals[k] for k in ks], color=bar_c, alpha=0.8, width=0.7)
-    ax_bar.set_xlabel("Supports measured (k)", fontsize=10)
-    ax_bar.set_ylabel("P95 rattle range (mm)", fontsize=10)
-    ax_bar.set_title("P95 reduction vs measurements taken", fontsize=9.5, color="#1a3a6e")
-    ax_bar.set_xticks(ks)
+    # ── Right: conditional P95 vs number of gaps measured ──
+    rng = np.random.default_rng(20260527)
+    ks = [0, 1, 2, 3, 4, 6, 9]
+    q_cent, q_typ = [], []
     for k in ks:
-        ax_bar.text(k, p95_vals[k] + 0.04, f"{p95_vals[k]:.2f}",
-                    ha="center", va="bottom", fontsize=8, color="#333")
-    ax_bar.spines[["top", "right"]].set_visible(False)
+        idx = list(range(k))
+        rc = np.empty(250)                       # measured = centred (worst/target)
+        for s in range(250):
+            u = rng.uniform(-DELTA_M, DELTA_M, N)
+            for i in idx:
+                u[i] = 0.0
+            rc[s] = max_rattle_mm(u, nd=18)
+        q_cent.append(float(np.percentile(rc, 95)))
+        if k == 0:                               # measured = typical random draw
+            q_typ.append(float(np.percentile(rc, 95)))
+        else:
+            qs = []
+            for _ in range(4):
+                vals = rng.uniform(-DELTA_M, DELTA_M, k)
+                rt = np.empty(150)
+                for s in range(150):
+                    u = rng.uniform(-DELTA_M, DELTA_M, N)
+                    for j, i in enumerate(idx):
+                        u[i] = vals[j]
+                    rt[s] = max_rattle_mm(u, nd=18)
+                qs.append(np.percentile(rt, 95))
+            q_typ.append(float(np.mean(qs)))
+    ax_k.plot(ks, q_cent, "o-", color="#cc2200", lw=2,
+              label="measured = centred (target = worst case)")
+    ax_k.plot(ks, q_typ, "s-", color="#228822", lw=2,
+              label="measured = typical random values")
+    ax_k.axhline(ceiling, color="#888", lw=1.2, ls=":", label=f"3.09 mm ceiling")
+    ax_k.annotate("one sector\nlanded (today)", xy=(1, q_typ[1]),
+                  xytext=(1.8, 2.05), fontsize=8, color="#444",
+                  arrowprops=dict(arrowstyle="->", color="#888"))
+    ax_k.set_xlabel("Number of support gaps measured (k of 9)", fontsize=10)
+    ax_k.set_ylabel("Conditional P95 rattle range (mm)", fontsize=10)
+    ax_k.set_title("Measurement narrows the EXPECTED value, not the bound\n"
+                   "(a centred assembly stays at the 3.09 mm worst case)",
+                   fontsize=9.5, color="#1a3a6e")
+    ax_k.set_xticks(ks)
+    ax_k.set_ylim(1.5, 3.25)
+    ax_k.legend(fontsize=8, frameon=False, loc="lower left")
+    ax_k.spines[["top", "right"]].set_visible(False)
 
     buf = io.BytesIO()
     fig.savefig(buf, format="png", dpi=110, bbox_inches="tight", facecolor="white")
@@ -550,20 +577,27 @@ def main():
     os.makedirs(plots_dir,  exist_ok=True)
     os.makedirs(strips_dir, exist_ok=True)
 
-    # Load MC data
-    try:
-        rattles_mm = np.load("/tmp/rattle_mc_5k.npy")
-        u_mc       = np.load("/tmp/u_mc_5k.npy")
-        u_worst    = u_mc[rattles_mm.argmax()]
-        print(f"Loaded MC data: {len(rattles_mm)} samples, max = {rattles_mm.max():.3f} mm")
-    except FileNotFoundError:
-        print("MC data not found at /tmp/ — running quick 1000-sample MC …")
-        rng = np.random.default_rng(0)
-        u_mc = rng.uniform(-DELTA_M, DELTA_M, (1000, N))
-        rattles_mm = np.array([max_rattle_mm(u, nd=24) for u in u_mc])
-        np.save("/tmp/rattle_mc_5k.npy", rattles_mm)
-        np.save("/tmp/u_mc_5k.npy", u_mc)
-        u_worst = u_mc[rattles_mm.argmax()]
+    # Load canonical MC data (committed + reproducible — see vv_mc_generator.py).
+    # Metric = peak-to-peak range (mm) = the n=1 lateral wall-displacement envelope.
+    here     = os.path.dirname(os.path.abspath(__file__))
+    data_dir = os.path.join(here, "data")
+    rpath    = os.path.join(data_dir, "rattle_mc_5k.npy")
+    upath    = os.path.join(data_dir, "u_mc_5k.npy")
+    if not (os.path.exists(rpath) and os.path.exists(upath)):
+        print("Canonical MC data missing — regenerating via vv_mc_generator …")
+        import vv_mc_generator
+        vv_mc_generator.main()
+    rattles_mm = np.load(rpath)
+    u_mc       = np.load(upath)
+    u_worst    = u_mc[rattles_mm.argmax()]
+    # near-mode (typical as-built) sample — the value one is most likely to "land on"
+    _h, _e  = np.histogram(rattles_mm, bins=60)
+    _mode   = 0.5 * (_e[_h.argmax()] + _e[_h.argmax() + 1])
+    i_mode  = int(np.argmin(np.abs(rattles_mm - _mode)))
+    u_mode  = u_mc[i_mode]
+    print(f"Loaded canonical MC: {len(rattles_mm)} samples, "
+          f"max = {rattles_mm.max():.3f} mm (peak-to-peak range); "
+          f"mode ≈ {_mode:.3f} mm (sample {i_mode} = {rattles_mm[i_mode]:.3f} mm)")
 
     # Static figures
     print("Generating 3-panel state figure (with polytopes) …")
@@ -601,7 +635,11 @@ def main():
     make_keyframe_strip(u_worst, strip_wc_trans, mode="translation")
     print(f"  → {strip_wc_trans}")
 
-    gif_nom_path = gif_wc_path = gif_rot_path = None
+    strip_mode_trans = os.path.join(strips_dir, "strip_mode_translation.png")
+    make_keyframe_strip(u_mode, strip_mode_trans, mode="translation")
+    print(f"  → {strip_mode_trans}")
+
+    gif_nom_path = gif_wc_path = gif_mode_path = gif_rot_path = None
     if not args.no_gif:
         print("Generating nominal translation GIF (with polytope) …")
         gif_nom_path, nom_rattle = make_gif(
@@ -612,6 +650,11 @@ def main():
         gif_wc_path, wc_rattle = make_gif(
             u_worst, os.path.join(anim_dir, "rattle_worst_case.gif"))
         print(f"  → {gif_wc_path}  ({wc_rattle:.2f} mm)")
+
+        print("Generating near-mode (typical as-built) translation GIF …")
+        gif_mode_path, mode_rattle = make_gif(
+            u_mode, os.path.join(anim_dir, "rattle_mode.gif"))
+        print(f"  → {gif_mode_path}  ({mode_rattle:.2f} mm)")
 
         print("Generating rotation GIF (max Δθ mode) …")
         gif_rot_path, rot_range = make_rotation_gif(
@@ -625,6 +668,7 @@ def main():
         "b64_partial": b64_partial,
         "gif_nom":  gif_nom_path,
         "gif_wc":   gif_wc_path,
+        "gif_mode": gif_mode_path,
         "gif_rot":  gif_rot_path,
         "rattles_mm": rattles_mm,
         "u_worst":  u_worst,
