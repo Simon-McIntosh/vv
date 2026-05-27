@@ -1,17 +1,26 @@
 """
 VV lateral rattle — clean scriptable visualisation.
 
-Conventions
------------
-All physics in SI (metres, radians).  Display magnifies displacements by
-MAG=500 so the ~1.5 mm rattle motion is clearly visible against the 8 m ring.
+Physical mechanism
+------------------
+Each of the 9 gravity supports is a four-bar linkage that allows large radial
+displacements of the VV (thermal expansion, assembly movement).  At the top of
+the four-bar a pin is mounted with its axis aligned in the toroidal direction.
+The VV bracket slides on this toroidal pin and is allowed ±1.5 mm of travel
+about the nominal (assembly) position.  This ±1.5 mm compliance is the source
+of the lateral "rattle" studied here.
 
-Support slot visual:
-  ·  Slot track line  :  light grey, ±1.5 mm × MAG wide in toroidal direction
-  ·  Limit bars       :  thick red lines perpendicular to slot ("|" marks)
-  ·  Pin dot          :  blue→amber→red as pin approaches its limit
-  ·  Radial spokes    :  thin blue lines from VV centre to each attachment;
-                         these rotate with the VV, making rotation obvious.
+Constraint model: the toroidal slide at support i when the VV moves by
+[Δx, Δy, Δθ] is   δᵢ = −sin(φᵢ)·Δx + cos(φᵢ)·Δy + R·Δθ   (=  A[i,:]·q).
+The bracket must satisfy  |u_assembly,i + δᵢ| ≤ 1.5 mm  at every support.
+
+Diagram conventions
+-------------------
+  ·  Toroidal travel range :  light grey track, ±1.5 mm × MAG wide
+  ·  Travel limit stops    :  thick red "|" bars (fixed to support structure)
+  ·  VV bracket dot        :  blue→amber→red as bracket approaches its stop
+  ·  Radial spokes         :  thin blue lines from VV centre to each support
+                              attachment; rotate with VV, making Δθ visible.
 
 Usage
 -----
