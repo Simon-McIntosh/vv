@@ -87,22 +87,30 @@ linear program (below). The earlier pseudoinverse scripts have been removed from
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════ §2 -->
-<h2 id="s2">§2 — Why It Matters: an n=1 First-Wall Displacement</h2>
+<h2 id="s2">§2 — Why It Matters: Two Distinct Consequences</h2>
 
-<p>A rigid <em>horizontal</em> shift of the vessel (Δx, Δy) moves the first wall sideways
-relative to the magnetically-defined plasma axis. The plasma–wall gap then varies as
-cos(toroidal angle) around the machine — a textbook <strong>n = 1 perturbation</strong>.
-The vessel "lands, then moves, then moves again": between shots, thermal and
-electromagnetic loads let it settle to a different position within its rattle envelope.</p>
+<p>The lateral rattle is a rigid <em>horizontal</em> shift of the vessel (Δx, Δy). It has two
+largely independent consequences, both bounded by the peak-to-peak range of §7 — one
+quasi-static, one dynamic.</p>
 
 <div class="callout key">
-<strong>Consequence:</strong> when the plasma is <strong>limited on the inner wall during
-start-up</strong>, an n=1 gap asymmetry makes the plasma contact the wall preferentially
-where the gap has closed, <strong>localising the start-up heat load</strong> toroidally.
-This is the classic n=1 error that tokamak operation works hard to avoid. The peak-to-peak
-range (§7) bounds how far the wall position can move between shots; it is <em>not</em> a
-fatigue or structural-dynamics quantity.</p>
-</div>
+<strong>(a) n=1 first-wall positioning (quasi-static).</strong> A horizontal shift moves the
+first wall sideways relative to the plasma axis, so the plasma–wall gap varies as
+cos(toroidal angle) — a textbook <strong>n=1 perturbation</strong>. The vessel "lands, then
+moves, then moves again": between shots it settles to a different position within its
+envelope. When the plasma is <strong>limited on the inner wall during start-up</strong>, the
+gap asymmetry makes it contact preferentially where the gap has closed, <strong>localising the
+start-up heat load</strong> toroidally. n=1 is precisely the error tokamak operation works
+hard to avoid.</div>
+
+<div class="callout warn">
+<strong>(b) Electromagnetic-driven impact (dynamic).</strong> Because the vessel is
+<em>mobile</em> within its ±1.5 mm slots, EM loads (disruptions, VDEs, halo currents) can
+accelerate it across the gap until it <strong>impacts its end-stops</strong>. The resulting
+shock loads on the gravity supports — and the fatigue from repeated impact cycling over the
+machine life — can be significant and must be assessed dynamically. The peak-to-peak range is
+the free travel available before impact; this is a genuine structural-dynamics and fatigue
+concern, not only a static positioning number.</div>
 
 <p><strong>Rotation is different.</strong> A rotation Δθ about the vertical axis turns the
 (axisymmetric) torus about its own axis — it does <strong>not</strong> change the
@@ -171,6 +179,17 @@ sits at a 3-support vertex that exploits the slack of the angled supports. (The 
 (support 0) is an orientation marker, and the blue shaded polygon is the rattle polytope —
 all positions reachable from that assembly state. Displacements are magnified ×500.</p>
 
+<div class="callout info">
+<strong>Reading the supports.</strong> At each support the grey toroidal slot (with red
+±1.5 mm end-stops) is held at a <em>constant radial distance from the vessel wall</em> — the
+four-bar linkage moves radially with the vessel, so radial motion is free. The grey bracket
+connects the wall to the coloured pin, whose position in the slot shows how much of the
+±1.5 mm <em>toroidal</em> travel is used: <span style="color:#1a6ea8;font-weight:bold">blue</span>
+= slack, <span style="color:#e07000;font-weight:bold">orange</span> = near the limit,
+<span style="color:#cc2200;font-weight:bold">red</span> = hard against the stop. Watch the
+slots track the vessel radially while the pins slide toroidally — that is the whole
+mechanism in one picture.</div>
+
 <figure>
   <img src="plots/vv_states.png" alt="Three-panel VV state diagram">
   <figcaption>
@@ -237,6 +256,10 @@ the principal direction (72-direction LP sweep). Generated reproducibly by
 <strong>Interpretation — and a caution.</strong> The peak-to-peak range is <em>robust</em> to
 assembly scatter: random offsets shrink the polytope diameter only modestly (P95 = 3.01 mm
 is barely below the 3.09 mm ceiling), and only the pathological alternating pattern locks it.
+The spike at the right edge of the histogram is a <strong>boundary pile-up</strong>: the range
+is the worst-direction polytope diameter, hard-capped at 3.093 mm, and a few percent of random
+assemblies fail to block the rattle in <em>any</em> direction and so sit on the ceiling. (It
+converges with direction count — physical, not a numerical artifact.)
 Crucially, the assembly team <em>aims</em> to centre the brackets (u ≈ 0) — which is exactly
 the worst case (3.09 mm). So P95 is <strong>not</strong> a relaxation of the design case: use
 <strong>3.09 mm</strong>. The single-sided offset of the VV centre from the machine axis is
@@ -321,11 +344,12 @@ distinct, independent mode. During the translation optimum rotation contributes 
 <tr><th>#</th><th>Recommendation</th><th>Status</th></tr>
 <tr><td>1</td><td>Use <strong>3.09 mm peak-to-peak</strong> as the bounding n=1 lateral wall displacement (nominal/centred assembly — the team's target and the theoretical ceiling)</td><td><span class="badge ok-b">CONFIRMED</span></td></tr>
 <tr><td>2</td><td>Do <em>not</em> rely on the MC P95 (3.01 mm) as a relaxation — it is only ~3% below the ceiling and the realistic assembly is centred (worst case)</td><td><span class="badge warn-b">CAUTION</span></td></tr>
-<tr><td>3</td><td>Assess <strong>start-up heat-load localisation on the inner-wall limiter</strong> for an n=1 wall offset of up to ≈ 2.9 mm (single-sided), and shot-to-shot variation up to 3.09 mm</td><td><span class="badge bad-b">ACTION REQUIRED</span></td></tr>
-<tr><td>4</td><td>The bound is set by the <strong>3 mm toroidal slot</strong> and is largely irreducible by assembly control; reducing the lateral rattle means reducing the slot/tolerance or adding toroidal restraint</td><td><span class="badge warn-b">DESIGN LEVER</span></td></tr>
-<tr><td>5</td><td>Gap metrology gives little benefit until ≥ 5 sectors are measured; with one sector landed the bound is unchanged. Confirm whether "landed" implies a measured gap</td><td><span class="badge warn-b">RECOMMENDED</span></td></tr>
-<tr><td>6</td><td>Confirm the <strong>±1.5 mm vs ±3 mm</strong> slot interpretation against the as-built GS spec — it scales every number by 2×</td><td><span class="badge bad-b">VERIFY</span></td></tr>
-<tr><td>7</td><td>Treat the ±187.5 µrad rotation (n=0) as a separate local-alignment case for ports/penetrations, not part of the n=1 budget</td><td><span class="badge warn-b">NOTED</span></td></tr>
+<tr><td>3</td><td>Assess <strong>start-up heat-load localisation on the inner-wall limiter</strong> (n=1) for a wall offset up to ≈ 2.9 mm single-sided, and shot-to-shot variation up to 3.09 mm</td><td><span class="badge bad-b">ACTION REQUIRED</span></td></tr>
+<tr><td>4</td><td>Assess the <strong>dynamic impact loads on the gravity supports</strong> from EM-driven motion across the ±1.5 mm gap (disruptions/VDEs/halo currents), and the <strong>fatigue</strong> from repeated impact cycling over machine life</td><td><span class="badge bad-b">ACTION REQUIRED</span></td></tr>
+<tr><td>5</td><td>The bound is set by the <strong>3 mm toroidal slot</strong> and is largely irreducible by assembly control; reducing the lateral rattle means reducing the slot/tolerance or adding toroidal restraint</td><td><span class="badge warn-b">DESIGN LEVER</span></td></tr>
+<tr><td>6</td><td>Gap metrology gives little benefit until ≥ 5 sectors are measured; with one sector landed the bound is unchanged. Confirm whether "landed" implies a measured gap</td><td><span class="badge warn-b">RECOMMENDED</span></td></tr>
+<tr><td>7</td><td>Confirm the <strong>±1.5 mm vs ±3 mm</strong> slot interpretation against the as-built GS spec — it scales every number by 2×</td><td><span class="badge bad-b">VERIFY</span></td></tr>
+<tr><td>8</td><td>Treat the ±187.5 µrad rotation (n=0) as a separate local-alignment case for ports/penetrations, not part of the n=1 budget</td><td><span class="badge warn-b">NOTED</span></td></tr>
 </table>
 
 <hr style="margin-top:3em;border-color:#ddd">

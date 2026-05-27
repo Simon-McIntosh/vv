@@ -196,14 +196,21 @@ def main():
                 "constraint matrix has AᵀA = diag(4.5, 4.5, 576) — exactly diagonal, so the "
                 "three rigid-body DOFs are uncorrelated.", False)])
 
-    heading2(doc, "2 — Why it matters: an n=1 first-wall displacement")
-    body(doc, [("A rigid horizontal shift of the vessel moves the first wall sideways relative "
-                "to the plasma axis, so the plasma–wall gap varies as cos(toroidal angle) — a "
-                "textbook ", False), ("n=1 perturbation", True),
-               (". The vessel lands, then moves between shots under thermal and EM loads. ", False)])
+    heading2(doc, "2 — Why it matters: two distinct consequences")
+    body(doc, [("The lateral rattle is a rigid horizontal shift of the vessel. It has two "
+                "largely independent consequences, both bounded by the peak-to-peak range — "
+                "one quasi-static, one dynamic.", False)])
     callout(doc, "key", [
-        ("When the plasma is limited on the inner wall during start-up, the n=1 gap asymmetry "
-         "localises the heat load toroidally", False)], title="Consequence:")
+        ("A horizontal shift makes the plasma–wall gap vary as cos(toroidal angle) — a textbook "
+         "n=1 perturbation. Between shots the vessel settles to a different position; when the "
+         "plasma is limited on the inner wall during start-up, the gap asymmetry localises the "
+         "start-up heat load toroidally.", False)], title="(a) n=1 first-wall positioning:")
+    callout(doc, "warn", [
+        ("Because the vessel is mobile within its ±1.5 mm slots, EM loads (disruptions, VDEs, "
+         "halo currents) can accelerate it across the gap until it impacts its end-stops. The "
+         "shock loads on the gravity supports, and fatigue from repeated impact cycling, can be "
+         "significant and must be assessed dynamically — not only as a static positioning "
+         "number.", False)], title="(b) EM-driven impact (dynamic):")
     body(doc, [("Rotation about the vertical axis is ", False), ("n=0", True),
                (" — it leaves the plasma–wall gap unchanged and is treated as a separate "
                 "local-alignment mode, not part of the n=1 budget.", False)])
@@ -231,6 +238,12 @@ def main():
     body(doc, [("The VV rocks along its principal rattle axis. Animations play in the served "
                 "HTML report; below, each GIF (first frame) is followed by a key-frame strip "
                 "showing the motion.", False)])
+    callout(doc, "info", [
+        ("At each support the grey toroidal slot (red ±1.5 mm end-stops) stays a constant "
+         "radial distance from the vessel — the four-bar linkage moves radially with it, so "
+         "radial motion is free — while the coloured pin shows the toroidal-constraint usage "
+         "(blue = slack, orange = near limit, red = at the stop).", False)],
+        title="Reading the supports:")
     figure(doc, os.path.join(DOCS, "animations", "rattle_worst_case.gif"),
            "Worst case — peak-to-peak range 3.09 mm (the design bound). [animated GIF]", width=3.6)
     figure(doc, os.path.join(DOCS, "strips", "strip_worst_translation.png"),
@@ -266,11 +279,12 @@ def main():
     table(doc, ["#", "Recommendation"], [
         ["1", "Use 3.09 mm peak-to-peak as the bounding n=1 lateral wall displacement (nominal/centred = worst case = ceiling)."],
         ["2", "Do not rely on the MC P95 (3.01 mm) as a relaxation — it is ~3% below the ceiling and the realistic assembly is centred."],
-        ["3", "Assess start-up heat-load localisation on the inner-wall limiter for an n=1 offset up to ≈ 2.9 mm single-sided, 3.09 mm shot-to-shot."],
-        ["4", "The bound is set by the 3 mm toroidal slot and is largely irreducible by assembly control — the lever is the tolerance or added toroidal restraint."],
-        ["5", "Gap metrology gives little benefit until ≥ 5 sectors are measured; confirm whether 'landed' implies a measured gap."],
-        ["6", "Confirm the ±1.5 mm vs ±3 mm slot interpretation against the as-built GS spec (scales every number ×2)."],
-        ["7", "Treat the ±187.5 µrad rotation (n=0) as a separate local-alignment case for ports/penetrations."],
+        ["3", "Assess start-up heat-load localisation on the inner-wall limiter (n=1) for an offset up to ≈ 2.9 mm single-sided, 3.09 mm shot-to-shot."],
+        ["4", "Assess dynamic impact loads on the gravity supports from EM-driven motion across the ±1.5 mm gap, and fatigue from repeated impact cycling."],
+        ["5", "The bound is set by the 3 mm toroidal slot and is largely irreducible by assembly control — the lever is the tolerance or added toroidal restraint."],
+        ["6", "Gap metrology gives little benefit until ≥ 5 sectors are measured; confirm whether 'landed' implies a measured gap."],
+        ["7", "Confirm the ±1.5 mm vs ±3 mm slot interpretation against the as-built GS spec (scales every number ×2)."],
+        ["8", "Treat the ±187.5 µrad rotation (n=0) as a separate local-alignment case for ports/penetrations."],
     ])
 
     foot = doc.add_paragraph()

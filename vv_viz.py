@@ -188,39 +188,44 @@ def plot_vv(ax, q_m_rad: np.ndarray, u_m: np.ndarray,
             ax.plot(ex, ey, "o", color="#5a8fd4", ms=5, zorder=3,
                     markeredgecolor="white", markeredgewidth=0.6)
 
-    # ── support slots ──
+    # ── support linkages ──────────────────────────────────────────────────
+    # Each four-bar linkage MOVES WITH THE VESSEL radially (radial motion is
+    # free), so the toroidal slot is held at a constant radial distance from the
+    # (displaced) vessel wall.  The pin slides within the ±1.5 mm slot — that
+    # toroidal offset (u_i + δ_i) is the constrained quantity.
     for i, φi in enumerate(ANGLES):
         er = np.array([ np.cos(φi),  np.sin(φi)])
         et = np.array([-np.sin(φi),  np.cos(φi)])
-        sc = R_SLOT * er
 
+        # displaced material point on the vessel wall at this support
+        wall = np.array([R_M * np.cos(φi + DTH) + DX,
+                         R_M * np.sin(φi + DTH) + DY])
+        dr   = float(wall @ er) - R_M           # radial travel (free) of the wall here
+        sc   = (R_SLOT + dr) * er               # slot tracks the vessel radially
+
+        delta_i = A[i] @ q_m_rad
+        pin     = sc + (u_m[i] + delta_i) * MAG * et   # pin = toroidal offset in slot
+
+        # four-bar linkage / bracket: connects the moving wall to the pin
+        ax.plot([wall[0], pin[0]], [wall[1], pin[1]],
+                "-", color="#9a9a9a", lw=1.3, zorder=2, alpha=0.7)
+
+        # toroidal slot channel (±1.5 mm travel) + red end-stops (ground stops)
         ax.plot([sc[0] - GAP_D * et[0], sc[0] + GAP_D * et[0]],
                 [sc[1] - GAP_D * et[1], sc[1] + GAP_D * et[1]],
-                "-", color="#aaaaaa", lw=1.6, zorder=3)
-
+                "-", color="#9aa0a8", lw=2.4, zorder=3, solid_capstyle="round")
         for sign in (-1, +1):
             bc = sc + sign * GAP_D * et
             ax.plot([bc[0] - BAR_HW * er[0], bc[0] + BAR_HW * er[0]],
                     [bc[1] - BAR_HW * er[1], bc[1] + BAR_HW * er[1]],
                     "-", color="#cc2200", lw=3.0, zorder=5)
 
-        delta_i   = A[i] @ q_m_rad
-        pin_off_d = (u_m[i] + delta_i) * MAG
-        pin_pos   = sc + pin_off_d * et
-
         frac = abs(u_m[i] + delta_i) / DELTA_M
         if   frac > 0.90: pcol, pms = "#cc2200", 10
         elif frac > 0.70: pcol, pms = "#e07000",  8
         else:              pcol, pms = "#1a6ea8",  7
-
-        ax.plot(pin_pos[0], pin_pos[1], "o",
-                color=pcol, ms=pms, zorder=6,
+        ax.plot(pin[0], pin[1], "o", color=pcol, ms=pms, zorder=6,
                 markeredgecolor="white", markeredgewidth=0.9)
-
-        ax_i = R_M * np.cos(φi + DTH) + DX
-        ay_i = R_M * np.sin(φi + DTH) + DY
-        ax.plot([ax_i, pin_pos[0]], [ay_i, pin_pos[1]],
-                "-", color="#999999", lw=0.5, zorder=2, alpha=0.35)
 
     ax.set_aspect("equal")
     ax.axis("off")
@@ -289,7 +294,11 @@ def make_rotation_gif(u_m: np.ndarray, outpath: str, n_frames: int = 40,
     bwd_m, dq_bwd = lp_vec(u_m, [0, 0, -1])
     rot_range_mrad = (fwd_m + bwd_m) * 1000  # µrad → mrad
 
-    polytope = rattle_polytope_2d(u_m, nd=180)
+    # Pure rotation does NOT translate the VV centre, so there is no 2-D
+    # translation polytope to draw here — the rotation DOF is the 1-D interval
+    # Δθ ∈ [−187.5, +187.5] µrad (the centre stays on the machine axis). The
+    # synchronously sliding pins are the signature of this mode.
+    polytope = None
 
     t = np.concatenate([np.linspace(0, 1, n_frames // 2),
                         np.linspace(1, 0, n_frames // 2)])
@@ -303,9 +312,10 @@ def make_rotation_gif(u_m: np.ndarray, outpath: str, n_frames: int = 40,
         plot_vv(ax, q_frames[k], u_m, polytope_m=polytope)
         dth_disp_deg = np.degrees(q_frames[k][2] * MAG)
         ax.set_title(
-            f"Rotation mode  Δθ = {q_frames[k][2]*1e6:+.1f} µrad  "
-            f"(×{MAG} = {dth_disp_deg:+.2f}°)  ·  range {rot_range_mrad:.3f} mrad",
-            fontsize=8.0, color="#444", pad=3,
+            f"Pure rotation — centre fixed on axis  ·  Δθ = {q_frames[k][2]*1e6:+.1f} µrad  "
+            f"(×{MAG} = {dth_disp_deg:+.2f}°)  ·  range {rot_range_mrad:.3f} mrad  ·  "
+            f"all 9 pins slide synchronously",
+            fontsize=7.2, color="#444", pad=3,
         )
 
     anim = FuncAnimation(fig, draw, frames=n_frames, interval=100)
@@ -445,7 +455,16 @@ def figure_mc_dashboard(rattles_mm: np.ndarray) -> str:
                 label=f"Max = {rattles_mm.max():.2f} mm")
     ax1.axvline(lp_range, color="#888", lw=1.5, ls="-",
                 label=f"LP worst case = {lp_range:.2f} mm")
-    ax1.set_xlabel("Rattle range (mm)", fontsize=10)
+    # explain the boundary pile-up at the ceiling (not an artifact: it converges
+    # in direction count and reflects assembly scatter rarely blocking the rattle)
+    ceil_frac = float(np.mean(rattles_mm >= lp_range - 0.05) * 100)
+    ax1.annotate(f"~{ceil_frac:.0f}% pile up at the {lp_range:.2f} mm ceiling\n"
+                 f"(worst-direction diameter is capped here;\nassembly scatter rarely blocks every direction)",
+                 xy=(lp_range, ax1.get_ylim()[1] * 0.40),
+                 xytext=(lp_range - 1.55, ax1.get_ylim()[1] * 0.86),
+                 fontsize=7.2, color="#7a1500", ha="left",
+                 arrowprops=dict(arrowstyle="->", color="#999", lw=1))
+    ax1.set_xlabel("Peak-to-peak rattle range (mm)", fontsize=10)
     ax1.set_ylabel(f"Count  (n = {len(rattles_mm):,})", fontsize=10)
     ax1.set_title("MC Rattle Distribution", fontsize=11, color="#1a3a6e")
     ax1.legend(fontsize=8.5, frameon=False)
