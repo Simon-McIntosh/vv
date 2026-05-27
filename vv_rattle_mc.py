@@ -1,571 +1,403 @@
 """
-ITER Vacuum Vessel - Correct LP-Based Rattle MC Analysis
+ITER VV Rattle Monte Carlo Analysis — Correct Physics
 
-Implements the CORRECT bounding analysis using scipy.optimize.linprog (HiGHS),
-avoiding the pseudoinverse/bounding_box approach which over-estimates bounds.
-
-Physical setup:
-- R = 8.0 m gravity support radius
-- 9 supports evenly spaced from top: φᵢ = π/2 - 2πi/9
-- TOROIDAL_TOLERANCE = 3 mm total (±1.5 mm per side)
-
-Rigid body DOFs: q = [dx (m), dy (m), dθ (rad)]
-Constraint matrix A (9×3): τᵢ = A[i,:] @ q  (toroidal displacement at support i)
+The physical model:
+- 9 gravity supports at R=8m, evenly spaced
+- Each support has a 3mm toroidal gap (±1.5mm)
+- Assembly state: each gap sampled uniformly and independently
+- Rattle: max additional rigid body motion within remaining gaps
+- Uses LP (scipy HiGHS) — NOT pseudoinverse — for correct constraint handling
 """
 
-import os
 import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib.gridspec import GridSpec
 from scipy.optimize import linprog
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+from matplotlib.patches import FancyArrowPatch
+import os
 
 os.makedirs("plots", exist_ok=True)
+np.random.seed(42)
 
-# Physical parameters
-R = 8.0                      # gravity support radius (m)
-N_SUPPORTS = 9
-TOROIDAL_TOLERANCE = 3e-3    # 3 mm total
-HALF_TOL = TOROIDAL_TOLERANCE / 2.0  # 1.5 mm per side
-
-
-# ---------------------------------------------------------------------------
-# Geometry
-# ---------------------------------------------------------------------------
+VESSEL_RADIUS = 8.0      # metres
+NUM_SUPPORTS = 9
+HALF_TOL = 1.5e-3        # ±1.5 mm in metres
 
 def build_geometry():
+    """Build support geometry and constraint matrix."""
+    angles = np.pi/2 - np.linspace(0, 2*np.pi, NUM_SUPPORTS, endpoint=False)
+    positions = np.column_stack([VESSEL_RADIUS*np.cos(angles), VESSEL_RADIUS*np.sin(angles)])
+    toroidal_dirs = np.column_stack([-np.sin(angles), np.cos(angles)])
+    
+    # A[i,:] = [t_x, t_y, -y_i*t_x + x_i*t_y] where last col = R (rotation coeff)
+    A = np.zeros((NUM_SUPPORTS, 3))
+    for i in range(NUM_SUPPORTS):
+        t = toroidal_dirs[i]
+        x, y = positions[i]
+        A[i, 0] = t[0]
+        A[i, 1] = t[1]
+        A[i, 2] = -y * t[0] + x * t[1]   # = R for all supports
+    
+    return A, np.linalg.pinv(A), positions, angles, toroidal_dirs
+
+def max_rattle_in_direction(u, A, half_tol, theta):
     """
-    Build support geometry and constraint matrix.
-
-    Returns
-    -------
-    A : ndarray (9, 3)
-        Constraint matrix: τᵢ = A[i,:] @ q
-    A_pinv : ndarray (3, 9)
-        Moore-Penrose pseudoinverse of A
-    positions : ndarray (9, 2)
-        (x, y) of each support in metres
-    angles : ndarray (9,)
-        Angular position of each support (rad), starting from top
+    Solve rattle LP: max (cos θ, sin θ) · (δdx, δdy)
+    subject to: A @ δq ≤ (half_tol - u)   [remaining forward gap]
+               -A @ δq ≤ (half_tol + u)   [remaining backward gap]
+    
+    Returns: max additional displacement in direction theta (metres).
+             Returns 0.0 if LP infeasible.
     """
-    angles = np.array([np.pi / 2 - 2 * np.pi * i / N_SUPPORTS for i in range(N_SUPPORTS)])
-    positions = np.column_stack([R * np.cos(angles), R * np.sin(angles)])
+    g_plus  = half_tol - u
+    g_minus = half_tol + u
+    A_ub = np.vstack([A, -A])
+    b_ub = np.concatenate([g_plus, g_minus])
+    c = [-np.cos(theta), -np.sin(theta), 0.0]
+    res = linprog(c, A_ub=A_ub, b_ub=b_ub, bounds=[(None,None)]*3, method='highs')
+    return -res.fun if res.status == 0 else 0.0
 
-    A = np.zeros((N_SUPPORTS, 3))
-    A[:, 0] = -np.sin(angles)    # toroidal contribution from dx
-    A[:, 1] =  np.cos(angles)    # toroidal contribution from dy
-    A[:, 2] =  R                 # toroidal contribution from dθ (= R for all i)
-
-    A_pinv = np.linalg.pinv(A)
-    return A, A_pinv, positions, angles
-
-
-# ---------------------------------------------------------------------------
-# LP bounds
-# ---------------------------------------------------------------------------
-
-def compute_lp_bounds(A, half_tol, num_directions=72):
+def compute_rattle_envelope(u, A, half_tol, num_directions=72):
     """
-    Compute the reachable VV centre envelope using LP (HiGHS).
-
-    For each direction θ in [0, 2π): maximise [cos θ, sin θ, 0] @ q
-    subject to -half_tol ≤ A @ q ≤ half_tol.
-
-    Also computes axis-aligned extremes dx_max, dy_max, dθ_max.
-
-    Parameters
-    ----------
-    A : ndarray (9, 3)
-    half_tol : float
-        Per-side tolerance in metres.
-    num_directions : int
-        Number of radial directions for the envelope polygon.
-
-    Returns
-    -------
-    envelope : ndarray (num_directions, 2)
-        Extreme (dx, dy) for each direction (metres).
-    dx_max : float
-        Maximum |dx| (metres).
-    dy_max : float
-        Maximum |dy| (metres).
-    dtheta_max : float
-        Maximum |dθ| (rad).
+    Compute the full rattle envelope for one assembly state.
+    Returns array of (δdx, δdy) extreme points in num_directions.
     """
-    bounds_q = [(None, None)] * 3
-    b_ub_upper = np.full(N_SUPPORTS, half_tol)   # A @ q ≤ half_tol
-    b_ub_lower = np.full(N_SUPPORTS, half_tol)   # -A @ q ≤ half_tol  → A_ineq = [-A; A]
-    A_ub = np.vstack([-A, A])
-    b_ub = np.concatenate([b_ub_lower, b_ub_upper])
+    thetas = np.linspace(0, 2*np.pi, num_directions, endpoint=False)
+    g_plus  = half_tol - u
+    g_minus = half_tol + u
+    A_ub = np.vstack([A, -A])
+    b_ub = np.concatenate([g_plus, g_minus])
+    
+    points = []
+    for theta in thetas:
+        c = [-np.cos(theta), -np.sin(theta), 0.0]
+        res = linprog(c, A_ub=A_ub, b_ub=b_ub, bounds=[(None,None)]*3, method='highs')
+        if res.status == 0:
+            points.append(res.x[:2])
+        else:
+            points.append([0.0, 0.0])
+    return np.array(points)
 
-    def _lp_max(c_obj):
-        """Maximise c_obj @ q (minimise -c_obj @ q)."""
-        res = linprog(-c_obj, A_ub=A_ub, b_ub=b_ub, bounds=bounds_q, method='highs')
-        assert res.status == 0, f"LP infeasible/unbounded: status={res.status}, message={res.message}"
-        return -res.fun, res.x
+def max_rattle_magnitude(u, A, half_tol, num_directions=36):
+    """Max rattle magnitude in any direction for one assembly state."""
+    envelope = compute_rattle_envelope(u, A, half_tol, num_directions)
+    return np.max(np.linalg.norm(envelope, axis=1))
 
-    # Axis-aligned extremes
-    _, x_dx = _lp_max(np.array([1.0, 0.0, 0.0]))
-    dx_max = x_dx[0]
-    _, x_dy = _lp_max(np.array([0.0, 1.0, 0.0]))
-    dy_max = x_dy[1]
-    _, x_dt = _lp_max(np.array([0.0, 0.0, 1.0]))
-    dtheta_max = x_dt[2]
+def assembly_position(u, A):
+    """Best-fit rigid body position for assembly gap state u."""
+    return np.linalg.lstsq(A, u, rcond=None)[0]
 
-    # Envelope over directions
-    thetas = np.linspace(0, 2 * np.pi, num_directions, endpoint=False)
-    envelope = np.zeros((num_directions, 2))
-    for k, theta in enumerate(thetas):
-        c = np.array([np.cos(theta), np.sin(theta), 0.0])
-        val, x = _lp_max(c)
-        envelope[k] = x[:2]
+# ─────────────────────────────────────────────────────────────────────────────
+# DEMONSTRATION PLOTS (understanding the physics)
+# ─────────────────────────────────────────────────────────────────────────────
 
-    return envelope, dx_max, dy_max, dtheta_max
+def plot_support_state(ax, A, positions, angles, u, title, half_tol):
+    """Draw the VV with supports showing gap state."""
+    theta = np.linspace(0, 2*np.pi, 200)
+    ax.plot(VESSEL_RADIUS*np.cos(theta), VESSEL_RADIUS*np.sin(theta),
+            'b-', lw=2, label='VV outline')
+    ax.plot(0, 0, 'ko', ms=6)
+    
+    g_plus  = half_tol - u
+    g_minus = half_tol + u
+    
+    for i, (pos, ang, ui) in enumerate(zip(positions, angles, u)):
+        ax.plot([0, pos[0]], [0, pos[1]], 'gray', lw=0.8, alpha=0.4)
+        
+        # Toroidal direction at this support
+        tor = np.array([-np.sin(ang), np.cos(ang)])
+        
+        # Scale up for visibility (×2000 to convert m → visible units at 8m scale)
+        scale = 2000
 
-
-# ---------------------------------------------------------------------------
-# MC sampling
-# ---------------------------------------------------------------------------
-
-def sample_assembly_states(A, half_tol, N_samples=100_000):
-    """
-    Sample VV assembly positions uniformly from the feasible polytope.
-
-    Uses rejection sampling with an oversampled bounding box.
-
-    Parameters
-    ----------
-    A : ndarray (9, 3)
-    half_tol : float
-    N_samples : int
-
-    Returns
-    -------
-    q_samples : ndarray (N_samples, 3)
-        Each row is [dx (m), dy (m), dθ (rad)].
-    """
-    np.random.seed(42)
-
-    # Conservative bounding box (slightly larger than LP bounds)
-    # LP-derived bounds (from verified physics)
-    dx_bnd    = 1.6e-3    # ±1.6 mm
-    dy_bnd    = 1.6e-3    # ±1.6 mm
-    dtheta_bnd = 0.20e-3  # ±0.20 mrad
-
-    box = np.array([dx_bnd, dy_bnd, dtheta_bnd])
-
-    collected = []
-    total_collected = 0
-    oversample = 10
-
-    while total_collected < N_samples:
-        n_try = oversample * N_samples
-        q_try = (2 * np.random.rand(n_try, 3) - 1) * box[None, :]
-        tau = q_try @ A.T                        # (n_try, 9)
-        feasible = np.all(np.abs(tau) <= half_tol, axis=1)
-        q_ok = q_try[feasible]
-        collected.append(q_ok)
-        total_collected += len(q_ok)
-
-    q_all = np.vstack(collected)
-    return q_all[:N_samples]
-
-
-# ---------------------------------------------------------------------------
-# Rattle computation
-# ---------------------------------------------------------------------------
-
-def compute_rattle_from_assembly(q0_batch, A, half_tol, num_directions=36):
-    """
-    Compute max additional LP displacement in each direction from each assembly state.
-
-    For assembly state q0 and direction ψ (unit vector in XY), the maximum
-    additional displacement in direction ψ while remaining feasible is:
-
-        rattle(ψ, q0) = M(ψ) − ψᵀ q0[:2]
-
-    where M(ψ) = LP_bound(ψ) = max_{|A@q|≤half_tol} ψᵀ q[:2].
-
-    This is exact (not an approximation) and follows directly from:
-        max_{q1 feasible} ψᵀ(q1 − q0)[:2]
-        = max_{q1 feasible} ψᵀ q1[:2] − ψᵀ q0[:2]
-        = M(ψ) − ψᵀ q0[:2]
-
-    INVARIANT: rattle(ψ, q0) + rattle(−ψ, q0) = 2·M(ψ) for all feasible q0,
-    because M(−ψ) = M(ψ) (feasible polytope is symmetric about q=0) and
-    ψᵀ q0[:2] cancels.
-
-    Parameters
-    ----------
-    q0_batch : ndarray (N, 3)
-    A : ndarray (9, 3)
-    half_tol : float
-    num_directions : int
-
-    Returns
-    -------
-    rattle : ndarray (N, num_directions)
-        rattle[n, d] = max additional displacement from state n in direction d (metres)
-    """
-    thetas = np.linspace(0, 2 * np.pi, num_directions, endpoint=False)
-    psi = np.column_stack([np.cos(thetas), np.sin(thetas)])   # (D, 2)
-
-    # LP bounds M(ψ) for each direction (computed once)
-    A_ub = np.vstack([-A, A])
-    b_ub = np.full(2 * N_SUPPORTS, half_tol)
-    M = np.zeros(num_directions)
-    for k in range(num_directions):
-        c = np.array([psi[k, 0], psi[k, 1], 0.0])
-        res = linprog(-c, A_ub=A_ub, b_ub=b_ub, bounds=[(None, None)] * 3, method='highs')
-        assert res.status == 0, f"LP infeasible: status={res.status}"
-        M[k] = -res.fun
-
-    # rattle[n, d] = M[d] - psi[d] @ q0[n, :2]
-    proj = q0_batch[:, :2] @ psi.T   # (N, D): proj[n, d] = psi[d] · q0[n, :2]
-    rattle = M[None, :] - proj        # (N, D), always ≥ 0 for feasible q0
-
-    return rattle
-
-
-def _verify_rattle_invariant(A, half_tol, num_directions=36):
-    """
-    Assert that rattle_fwd(θ) + rattle_bwd(θ) = 2·LP_bound(θ) for a small test batch.
-
-    This invariant holds analytically because the feasible polytope is symmetric
-    about q=0, so LP_bound(−ψ) = LP_bound(ψ), and the projection term cancels.
-    """
-    np.random.seed(0)
-    q_test = sample_assembly_states(A, half_tol, N_samples=50)
-
-    rattle = compute_rattle_from_assembly(q_test, A, half_tol, num_directions)
-
-    # Forward + backward: direction d and d + D/2 are opposites
-    D2 = num_directions // 2
-    fwd = rattle[:, :D2]
-    bwd = rattle[:, D2:]
-    total = fwd + bwd   # (N, D//2) — must equal 2·M[d] for d in 0..D/2-1
-
-    # Recompute LP bounds for first half of directions
-    thetas = np.linspace(0, 2 * np.pi, num_directions, endpoint=False)[:D2]
-    A_ub = np.vstack([-A, A])
-    b_ub = np.full(2 * N_SUPPORTS, half_tol)
-    expected = np.zeros(D2)
-    for k, theta in enumerate(thetas):
-        c = np.array([np.cos(theta), np.sin(theta), 0.0])
-        res = linprog(-c, A_ub=A_ub, b_ub=b_ub, bounds=[(None, None)] * 3, method='highs')
-        assert res.status == 0
-        expected[k] = 2 * (-res.fun)
-
-    err = np.abs(total - expected[None, :]).max()
-    assert err < 1e-9, f"Rattle invariant FAILED: max error = {err:.2e}"
-    print(f"  [OK] Rattle invariant verified: max error = {err:.2e}")
-
-
-# ---------------------------------------------------------------------------
-# Plotting
-# ---------------------------------------------------------------------------
-
-def plot_feasible_envelope(envelope_xy, A, half_tol, assembly_samples):
-    """
-    Three-panel plot: LP envelope + MC scatter, dx histogram, dy histogram.
-
-    Parameters
-    ----------
-    envelope_xy : ndarray (D, 2)  in metres
-    A : ndarray (9, 3)
-    half_tol : float
-    assembly_samples : ndarray (N, 3)
-    """
-    dx_mm = assembly_samples[:, 0] * 1e3
-    dy_mm = assembly_samples[:, 1] * 1e3
-    env_mm = envelope_xy * 1e3
-
-    fig = plt.figure(figsize=(14, 5))
-    gs = GridSpec(1, 3, figure=fig, wspace=0.35)
-
-    # Panel 1: envelope + scatter
-    ax1 = fig.add_subplot(gs[0])
-    env_closed = np.vstack([env_mm, env_mm[0]])
-    ax1.plot(env_closed[:, 0], env_closed[:, 1], 'b-', lw=2, label='LP envelope')
-    ax1.scatter(dx_mm[::50], dy_mm[::50], s=1, alpha=0.3, color='grey', label='MC samples (1/50)')
-    ax1.set_xlabel('dx (mm)')
-    ax1.set_ylabel('dy (mm)')
-    ax1.set_title('VV Centre Reachable Envelope')
-    ax1.set_aspect('equal')
-    ax1.axhline(0, color='k', lw=0.5)
-    ax1.axvline(0, color='k', lw=0.5)
-    ax1.legend(fontsize=8)
-
-    # Panel 2: dx histogram
-    ax2 = fig.add_subplot(gs[1])
-    ax2.hist(dx_mm, bins=80, density=True, color='steelblue', edgecolor='none', alpha=0.8)
-    ax2.set_xlabel('dx (mm)')
-    ax2.set_ylabel('Density')
-    ax2.set_title('Assembly X offset distribution')
-
-    # Panel 3: dy histogram
-    ax3 = fig.add_subplot(gs[2])
-    ax3.hist(dy_mm, bins=80, density=True, color='coral', edgecolor='none', alpha=0.8)
-    ax3.set_xlabel('dy (mm)')
-    ax3.set_ylabel('Density')
-    ax3.set_title('Assembly Y offset distribution')
-
-    fig.suptitle('ITER VV Feasible Assembly Positions  (LP + MC)', fontsize=12, fontweight='bold')
-    fig.savefig('plots/feasible_envelope.png', dpi=150, bbox_inches='tight')
-    plt.close(fig)
-    print("  Saved plots/feasible_envelope.png")
-
-
-def plot_rattle_analysis(assembly_samples_q, rattle_fwd, rattle_bwd, lp_dx_max, lp_dy_max):
-    """
-    Four-panel rattle analysis plot.
-
-    Parameters
-    ----------
-    assembly_samples_q : ndarray (N, 3)
-    rattle_fwd : ndarray (N,)  max additional +X displacement (m)
-    rattle_bwd : ndarray (N,)  max additional -X displacement (m)
-    lp_dx_max : float
-    lp_dy_max : float
-    """
-    dx_mm  = assembly_samples_q[:, 0] * 1e3
-    dy_mm  = assembly_samples_q[:, 1] * 1e3
-    rfwd_mm = rattle_fwd * 1e3
-    rbwd_mm = rattle_bwd * 1e3
-    total_mm = (rfwd_mm + rbwd_mm)
-    rmax_mm  = np.maximum(rfwd_mm, rbwd_mm)
-
-    fig = plt.figure(figsize=(14, 10))
-    gs = GridSpec(2, 2, figure=fig, wspace=0.35, hspace=0.45)
-
-    # Panel 1: scatter coloured by rattle magnitude
-    ax1 = fig.add_subplot(gs[0, 0])
-    sc = ax1.scatter(dx_mm, dy_mm, c=rmax_mm, s=1, cmap='viridis')
-    fig.colorbar(sc, ax=ax1, label='Max rattle (mm)')
-    ax1.set_xlabel('dx₀ (mm)')
-    ax1.set_ylabel('dy₀ (mm)')
-    ax1.set_title('Assembly state coloured by rattle')
-    ax1.set_aspect('equal')
-
-    # Panel 2: PDF of rattle_fwd
-    ax2 = fig.add_subplot(gs[0, 1])
-    ax2.hist(rfwd_mm, bins=80, density=True, color='steelblue', edgecolor='none', alpha=0.8)
-    ax2.axvline(lp_dx_max * 1e3, color='r', lw=1.5, ls='--', label=f'LP max = {lp_dx_max*1e3:.3f} mm')
-    ax2.set_xlabel('Rattle fwd X (mm)')
-    ax2.set_ylabel('Density')
-    ax2.set_title('PDF of max forward X rattle from assembly state')
-    ax2.legend(fontsize=8)
-
-    # Panel 3: PDF of total rattle (should be delta at 2×lp_dx_max)
-    ax3 = fig.add_subplot(gs[1, 0])
-    total_range = total_mm.max() - total_mm.min()
-    if total_range < 1e-6:
-        # Constant — plot a vertical spike
-        ax3.axvline(total_mm[0], color='coral', lw=3, label='delta function')
-    else:
-        ax3.hist(total_mm, bins=80, density=True, color='coral', edgecolor='none', alpha=0.8)
-    ax3.axvline(2 * lp_dx_max * 1e3, color='r', lw=1.5, ls='--',
-                label=f'2×LP = {2*lp_dx_max*1e3:.3f} mm')
-    ax3.set_xlabel('Total rattle X (fwd + bwd) (mm)')
-    ax3.set_ylabel('Density')
-    ax3.set_title('Total rattle range (CONSTANT = 2×LP bound)')
-    ax3.legend(fontsize=8)
-
-    # Panel 4: text summary
-    ax4 = fig.add_subplot(gs[1, 1])
-    ax4.axis('off')
-    lines = [
-        f"LP bounds (exact):",
-        f"  dx_max = ±{lp_dx_max*1e3:.3f} mm",
-        f"  dy_max = ±{lp_dy_max*1e3:.3f} mm",
-        f"",
-        f"Total rattle range (constant):",
-        f"  X = {2*lp_dx_max*1e3:.3f} mm",
-        f"  Y = {2*lp_dy_max*1e3:.3f} mm",
-        f"",
-        f"Rattle fwd X:",
-        f"  mean = {rfwd_mm.mean():.3f} mm",
-        f"  std  = {rfwd_mm.std():.3f} mm",
-        f"  95th = {np.percentile(rfwd_mm, 95):.3f} mm",
-    ]
-    ax4.text(0.05, 0.95, '\n'.join(lines), transform=ax4.transAxes,
-             va='top', ha='left', fontsize=10, family='monospace',
-             bbox=dict(boxstyle='round', facecolor='lightyellow', alpha=0.8))
-
-    fig.suptitle('ITER VV Rattle Analysis', fontsize=13, fontweight='bold')
-    fig.savefig('plots/rattle_analysis.png', dpi=150, bbox_inches='tight')
-    plt.close(fig)
-    print("  Saved plots/rattle_analysis.png")
-
-
-def plot_summary_for_assembly_team(lp_bounds, assembly_stats, rattle_stats):
-    """
-    Clean 2-panel summary plot for the assembly team.
-
-    Parameters
-    ----------
-    lp_bounds : dict with keys dx_max, dy_max, dtheta_max, envelope (metres)
-    assembly_stats : dict with keys dx_mean, dx_std, dx_p95, dy_mean, dy_std, dy_p95
-    rattle_stats : dict with keys p95, p99 (metres)
-    """
-    fig, axes = plt.subplots(1, 2, figsize=(14, 6))
-
-    # Panel 1: feasible envelope
-    ax = axes[0]
-    env_mm = lp_bounds['envelope'] * 1e3
-    env_closed = np.vstack([env_mm, env_mm[0]])
-    ax.fill(env_closed[:, 0], env_closed[:, 1], alpha=0.2, color='blue')
-    ax.plot(env_closed[:, 0], env_closed[:, 1], 'b-', lw=2)
-    ax.axhline(0, color='k', lw=0.5)
-    ax.axvline(0, color='k', lw=0.5)
-    ax.set_xlabel('VV centre dx (mm)')
-    ax.set_ylabel('VV centre dy (mm)')
-    ax.set_title('Maximum VV Centre Travel\n(LP feasible envelope)')
+        # Full gap extent
+        p_pos = pos + tor * half_tol * scale
+        p_neg = pos - tor * half_tol * scale
+        ax.plot([p_neg[0], p_pos[0]], [p_neg[1], p_pos[1]], 'lightgray', lw=4, solid_capstyle='round')
+        
+        # Consumed gap (where pin currently is)
+        p_pin = pos + tor * ui * scale
+        ax.plot([pos[0], p_pin[0]], [pos[1], p_pin[1]],
+                'red' if ui > 0 else 'royalblue', lw=4, solid_capstyle='round',
+                alpha=0.8)
+        
+        # Remaining forward gap
+        if g_plus[i] > 1e-9:
+            ax.plot([p_pin[0], p_pos[0]], [p_pin[1], p_pos[1]], 'lime', lw=4, solid_capstyle='round', alpha=0.8)
+        # Remaining backward gap
+        if g_minus[i] > 1e-9:
+            ax.plot([p_neg[0], p_pin[0]], [p_neg[1], p_pin[1]], 'cyan', lw=4, solid_capstyle='round', alpha=0.8)
+        
+        ax.annotate(f'S{i+1}\nu={ui*1000:+.1f}', pos*1.15,
+                    fontsize=7, ha='center', va='center')
+    
+    ax.set_xlim(-12, 12); ax.set_ylim(-12, 12)
     ax.set_aspect('equal')
-    ax.annotate(f'±{lp_bounds["dx_max"]*1e3:.3f} mm', xy=(lp_bounds['dx_max']*1e3, 0),
-                xytext=(lp_bounds['dx_max']*1e3 * 0.5, lp_bounds['dy_max']*1e3 * 0.7),
-                fontsize=9, color='blue',
-                arrowprops=dict(arrowstyle='->', color='blue'))
+    ax.set_title(title, fontsize=10, fontweight='bold')
+    ax.grid(True, alpha=0.2)
 
-    # Panel 2: table
-    ax2 = axes[1]
-    ax2.axis('off')
-
-    dx_m = lp_bounds['dx_max'] * 1e3
-    dy_m = lp_bounds['dy_max'] * 1e3
-    dt_m = lp_bounds['dtheta_max'] * 1e3   # mrad
-
-    rows = [
-        ['Parameter', 'Value', 'Unit'],
-        ['Max VV centre X', f'±{dx_m:.3f}', 'mm'],
-        ['Max VV centre Y', f'±{dy_m:.3f}', 'mm'],
-        ['Max VV rotation', f'±{dt_m:.4f}', 'mrad'],
-        ['Total X rattle range', f'{2*dx_m:.3f}', 'mm'],
-        ['Total Y rattle range', f'{2*dy_m:.3f}', 'mm'],
-        ['Assembly X 95th %ile', f'{assembly_stats["dx_p95"]:.3f}', 'mm'],
-        ['Assembly Y 95th %ile', f'{assembly_stats["dy_p95"]:.3f}', 'mm'],
-        ['Rattle 95th %ile', f'{rattle_stats["p95"]*1e3:.3f}', 'mm'],
-        ['Rattle 99th %ile', f'{rattle_stats["p99"]*1e3:.3f}', 'mm'],
+def plot_demonstration():
+    """
+    Three-panel plot demonstrating the physics.
+    Panel A: Nominal state (all u=0) → full rattle
+    Panel B: Alternating state (max blocking) → zero rattle  
+    Panel C: Random state → partial rattle
+    """
+    A, A_pinv, positions, angles, toroidal_dirs = build_geometry()
+    half_tol = HALF_TOL
+    
+    # Three cases
+    u_nominal    = np.zeros(NUM_SUPPORTS)
+    u_alternating = np.array([+half_tol if i%2==0 else -half_tol for i in range(NUM_SUPPORTS)])
+    rng = np.random.default_rng(7)
+    u_random     = rng.uniform(-half_tol, half_tol, NUM_SUPPORTS)
+    
+    cases = [
+        (u_nominal,     "A: Nominal assembly (u=0)\nAll gaps symmetric → maximum rattle"),
+        (u_alternating, "B: Alternating max blocking\nZero rattle (VV locked)"),
+        (u_random,      "C: Random assembly state\nPartial rattle"),
     ]
-    tbl = ax2.table(
-        cellText=rows[1:],
-        colLabels=rows[0],
-        loc='center',
-        cellLoc='center',
-    )
-    tbl.auto_set_font_size(False)
-    tbl.set_fontsize(10)
-    tbl.scale(1.2, 1.6)
-    ax2.set_title('Key Numbers for Assembly Team', fontsize=12, fontweight='bold', pad=20)
+    
+    fig = plt.figure(figsize=(18, 14))
+    
+    for col, (u, title) in enumerate(cases):
+        # Top: support state visualisation
+        ax_top = fig.add_subplot(3, 3, col+1)
+        plot_support_state(ax_top, A, positions, angles, u, title, half_tol)
+        
+        # Compute rattle envelope
+        envelope = compute_rattle_envelope(u, A, half_tol, num_directions=72)
+        max_mag  = np.max(np.linalg.norm(envelope, axis=1))
+        
+        # Also compute via pseudoinverse (WRONG) for comparison
+        c_x = A_pinv[:2,:].T @ np.array([1.0, 0.0])
+        g_plus = half_tol - u
+        g_minus = half_tol + u
+        pseudo_rattle = np.sum(np.where(c_x > 0, c_x*g_plus, -c_x*g_minus)) * 1000
+        
+        # Middle: rattle envelope (in mm)
+        ax_mid = fig.add_subplot(3, 3, col+4)
+        env_mm = envelope * 1000
+        env_closed = np.vstack([env_mm, env_mm[0]])
+        ax_mid.fill(env_closed[:,0], env_closed[:,1], alpha=0.25, color='steelblue')
+        ax_mid.plot(env_closed[:,0], env_closed[:,1], 'steelblue', lw=2, label='Rattle envelope (LP)')
+        ax_mid.plot(0, 0, 'ko', ms=6, zorder=5, label='Assembly position')
+        ax_mid.set_xlabel('δdx (mm)'); ax_mid.set_ylabel('δdy (mm)')
+        ax_mid.set_aspect('equal'); ax_mid.grid(True, alpha=0.3)
+        lim = max(max_mag*1000*1.3, 0.1)
+        ax_mid.set_xlim(-lim, lim); ax_mid.set_ylim(-lim, lim)
+        ax_mid.set_title(f'Rattle envelope\nMax |rattle| = {max_mag*1000:.4f} mm\n'
+                         f'(pseudoinverse would give {pseudo_rattle:.4f} mm — WRONG for case B)',
+                         fontsize=9)
+        ax_mid.legend(fontsize=8)
+        
+        # Bottom: bar chart of per-direction rattle
+        ax_bot = fig.add_subplot(3, 3, col+7)
+        thetas = np.linspace(0, 2*np.pi, 72, endpoint=False)
+        radii  = np.linalg.norm(envelope, axis=1) * 1000
+        ax_bot.bar(np.degrees(thetas), radii, width=5, color='steelblue', alpha=0.7)
+        ax_bot.set_xlabel('Direction (°)'); ax_bot.set_ylabel('Rattle reach (mm)')
+        ax_bot.set_title('Rattle vs direction', fontsize=9)
+        ax_bot.set_xlim(0, 360)
+        ax_bot.set_xticks([0, 90, 180, 270, 360])
+    
+    # Legend for gap colours
+    leg_items = [
+        mpatches.Patch(color='lightgray', label='Total gap (±1.5 mm)'),
+        mpatches.Patch(color='red',       label='Pin +forward (consumed)'),
+        mpatches.Patch(color='royalblue', label='Pin -backward (consumed)'),
+        mpatches.Patch(color='lime',      label='Remaining forward gap'),
+        mpatches.Patch(color='cyan',      label='Remaining backward gap'),
+    ]
+    fig.legend(handles=leg_items, loc='lower center', ncol=5, fontsize=9,
+               bbox_to_anchor=(0.5, 0.01))
+    
+    plt.suptitle('ITER VV Rattle Physics — Three Assembly Scenarios\n'
+                 'Rattle = max additional rigid-body motion within remaining gaps (correct LP)',
+                 fontsize=13, fontweight='bold', y=1.01)
+    plt.tight_layout(rect=[0, 0.06, 1, 1])
+    plt.savefig('plots/rattle_physics_demonstration.png', dpi=150, bbox_inches='tight')
+    plt.close()
+    print("Saved: plots/rattle_physics_demonstration.png")
+    
+    # Print key verification numbers
+    for u, label in [(u_nominal, 'Nominal'), (u_alternating, 'Alternating'), (u_random, 'Random')]:
+        env = compute_rattle_envelope(u, A, half_tol, 36)
+        max_r = np.max(np.linalg.norm(env, axis=1))
+        c_x = A_pinv[:2,:].T @ np.array([1.0, 0.0])
+        g_plus = half_tol - u
+        g_minus = half_tol + u
+        pseudo = np.sum(np.where(c_x > 0, c_x*g_plus, -c_x*g_minus))
+        print(f"  {label}: LP rattle = {max_r*1000:.4f} mm, pseudoinverse (WRONG) = {pseudo*1000:.4f} mm")
 
-    fig.suptitle('ITER VV Assembly Tolerance Summary', fontsize=14, fontweight='bold')
-    fig.savefig('plots/assembly_team_summary.png', dpi=150, bbox_inches='tight')
-    plt.close(fig)
-    print("  Saved plots/assembly_team_summary.png")
+def run_mc_simulation(N_samples=2000):
+    """
+    MC simulation: sample N assembly states, compute max rattle for each.
+    Uses correct LP formulation.
+    Returns: u_samples (N,9), assembly_positions (N,3), max_rattles (N,)
+    """
+    A, A_pinv, positions, angles, toroidal_dirs = build_geometry()
+    half_tol = HALF_TOL
+    
+    print(f"Running MC with {N_samples} samples (LP per sample)...")
+    u_samples = np.random.uniform(-half_tol, half_tol, (N_samples, NUM_SUPPORTS))
+    assembly_pos = np.array([np.linalg.lstsq(A, u, rcond=None)[0] for u in u_samples])
+    
+    max_rattles = []
+    for i, u in enumerate(u_samples):
+        if i % 200 == 0:
+            print(f"  Sample {i}/{N_samples}...")
+        mr = max_rattle_magnitude(u, A, half_tol, num_directions=24)
+        max_rattles.append(mr)
+    
+    return A, u_samples, assembly_pos, np.array(max_rattles)
 
+def plot_mc_results(A, u_samples, assembly_pos, max_rattles):
+    """Plot MC statistics: distribution of rattle vs assembly position."""
+    fig, axes = plt.subplots(2, 3, figsize=(16, 10))
+    
+    dx0_mm = assembly_pos[:, 0] * 1000
+    dy0_mm = assembly_pos[:, 1] * 1000
+    mr_mm  = max_rattles * 1000
+    
+    # 1. Assembly position scatter coloured by max rattle
+    ax = axes[0, 0]
+    sc = ax.scatter(dx0_mm, dy0_mm, c=mr_mm, cmap='plasma', s=8, alpha=0.6)
+    plt.colorbar(sc, ax=ax, label='Max rattle (mm)')
+    ax.set_xlabel('Assembly dx₀ (mm)'); ax.set_ylabel('Assembly dy₀ (mm)')
+    ax.set_title('Assembly position distribution\n(coloured by max rattle)')
+    ax.set_aspect('equal'); ax.grid(True, alpha=0.3)
+    ax.axhline(0, color='k', lw=0.5); ax.axvline(0, color='k', lw=0.5)
+    
+    # 2. Max rattle PDF
+    ax = axes[0, 1]
+    ax.hist(mr_mm, bins=50, density=True, color='steelblue', edgecolor='k', alpha=0.7)
+    ax.axvline(np.percentile(mr_mm, 95), color='orange', ls='--', lw=2,
+               label=f'P95 = {np.percentile(mr_mm,95):.3f} mm')
+    ax.axvline(np.percentile(mr_mm, 99), color='red', ls='--', lw=2,
+               label=f'P99 = {np.percentile(mr_mm,99):.3f} mm')
+    ax.axvline(np.max(mr_mm), color='darkred', ls='-', lw=1.5,
+               label=f'Max = {np.max(mr_mm):.3f} mm')
+    ax.set_xlabel('Max rattle (mm)'); ax.set_ylabel('PDF')
+    ax.set_title('Max rattle magnitude distribution\n(all assembly states)')
+    ax.legend(fontsize=9); ax.grid(True, alpha=0.3)
+    
+    # 3. Rattle vs assembly offset magnitude
+    ax = axes[0, 2]
+    offset_mm = np.sqrt(dx0_mm**2 + dy0_mm**2)
+    ax.scatter(offset_mm, mr_mm, s=4, alpha=0.3, color='steelblue')
+    ax.set_xlabel('Assembly offset magnitude (mm)'); ax.set_ylabel('Max rattle (mm)')
+    ax.set_title('Rattle vs assembly offset\n(larger offset → smaller rattle)')
+    ax.grid(True, alpha=0.3)
+    
+    # 4. X rattle in +X and -X directions
+    ax = axes[1, 0]
+    A2, A_pinv2, positions, angles, toroidal_dirs = build_geometry()
+    half_tol = HALF_TOL
+    rattle_px = np.array([max_rattle_in_direction(u, A2, half_tol, 0) for u in u_samples]) * 1000
+    rattle_nx = np.array([max_rattle_in_direction(u, A2, half_tol, np.pi) for u in u_samples]) * 1000
+    ax.hist(rattle_px, bins=40, density=True, alpha=0.6, color='blue', label='+X rattle')
+    ax.hist(rattle_nx, bins=40, density=True, alpha=0.6, color='red', label='-X rattle')
+    ax.set_xlabel('Rattle distance (mm)'); ax.set_ylabel('PDF')
+    ax.set_title('X-direction rattle distribution\n(from random assembly states)')
+    ax.legend(); ax.grid(True, alpha=0.3)
+    
+    # 5. Total X rattle (should NOT be constant — unlike pseudoinverse claim)
+    ax = axes[1, 1]
+    total_x = rattle_px + rattle_nx
+    ax.hist(total_x, bins=40, density=True, color='purple', edgecolor='k', alpha=0.7)
+    ax.set_xlabel('Total X rattle range (mm)'); ax.set_ylabel('PDF')
+    ax.set_title(f'Total X rattle range distribution\n'
+                 f'(mean={np.mean(total_x):.3f}, max={np.max(total_x):.3f} mm)\n'
+                 f'NOT constant — pseudoinverse claim was wrong')
+    ax.grid(True, alpha=0.3)
+    
+    # 6. Statistics table
+    ax = axes[1, 2]
+    ax.axis('off')
+    stats_text = f"""MC RATTLE STATISTICS
+{'─'*40}
+N samples:  {len(max_rattles):,}
 
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
+MAX RATTLE (any direction):
+  Mean:     {np.mean(mr_mm):.4f} mm
+  Std:      {np.std(mr_mm):.4f} mm
+  P50:      {np.percentile(mr_mm,50):.4f} mm
+  P95:      {np.percentile(mr_mm,95):.4f} mm
+  P99:      {np.percentile(mr_mm,99):.4f} mm
+  Maximum:  {np.max(mr_mm):.4f} mm
+
+X RATTLE (+X direction):
+  Mean:     {np.mean(rattle_px):.4f} mm
+  P95:      {np.percentile(rattle_px,95):.4f} mm
+  Max:      {np.max(rattle_px):.4f} mm
+
+ASSEMBLY POSITION:
+  X std:    {np.std(dx0_mm):.4f} mm
+  Y std:    {np.std(dy0_mm):.4f} mm
+  |r| P95:  {np.percentile(np.sqrt(dx0_mm**2+dy0_mm**2),95):.4f} mm
+
+KEY INSIGHT:
+  Alternating assembly → 0 rattle
+  Uniform same-side → max rattle
+  MC captures the full distribution"""
+    ax.text(0.05, 0.95, stats_text, transform=ax.transAxes, fontsize=9,
+            va='top', fontfamily='monospace',
+            bbox=dict(boxstyle='round', fc='lightyellow', alpha=0.9))
+    
+    plt.suptitle('ITER VV Rattle MC Analysis — Correct LP Physics\n'
+                 '(Each sample: random independent gap state → LP for max rattle)',
+                 fontsize=13, fontweight='bold')
+    plt.tight_layout()
+    plt.savefig('plots/rattle_mc_results.png', dpi=150, bbox_inches='tight')
+    plt.close()
+    print("Saved: plots/rattle_mc_results.png")
+    return {
+        'n': len(max_rattles),
+        'mean_mm': float(np.mean(mr_mm)),
+        'p95_mm': float(np.percentile(mr_mm, 95)),
+        'p99_mm': float(np.percentile(mr_mm, 99)),
+        'max_mm': float(np.max(mr_mm)),
+        'rattle_px_p95': float(np.percentile(rattle_px, 95)),
+    }
 
 def main():
-    """Run the full VV rattle MC analysis and produce summary plots."""
-    print("=" * 60)
-    print("  ITER VV RATTLE MC — CORRECT LP-BASED ANALYSIS")
-    print("=" * 60)
-
-    # 1. Geometry
-    print("\n[1] Building geometry...")
-    A, A_pinv, positions, angles = build_geometry()
-    print(f"  A shape: {A.shape},  rank: {np.linalg.matrix_rank(A)}")
-
-    # 2. LP bounds
-    print("\n[2] Computing LP bounds (72 directions)...")
-    envelope, dx_max, dy_max, dtheta_max = compute_lp_bounds(A, HALF_TOL, num_directions=72)
-    print(f"  dx_max    = ±{dx_max*1e3:.3f} mm")
-    print(f"  dy_max    = ±{dy_max*1e3:.3f} mm")
-    print(f"  dtheta_max = ±{dtheta_max*1e3:.4f} mrad")
-
-    # Verify dtheta matches analytic value 1.5mm/8m
-    analytic_dtheta = HALF_TOL / R
-    assert abs(dtheta_max - analytic_dtheta) < 1e-9, \
-        f"dtheta_max mismatch: {dtheta_max:.6e} vs {analytic_dtheta:.6e}"
-    print(f"  [OK] dθ_max matches analytic {analytic_dtheta*1e3:.4f} mrad = 1.5mm/8m")
-
-    # 3. Sample assembly states
-    print("\n[3] Sampling 100k assembly states (rejection MC)...")
-    q_samples = sample_assembly_states(A, HALF_TOL, N_samples=100_000)
-    print(f"  Sampled: {q_samples.shape[0]} feasible states")
-
-    # Verify constraints satisfied
-    tau_check = q_samples @ A.T
-    assert np.all(np.abs(tau_check) <= HALF_TOL + 1e-12), "Constraint violation in MC samples!"
-    print("  [OK] All samples satisfy toroidal constraints")
-
-    # 4. Rattle invariant check
-    print("\n[4] Verifying rattle invariant (small batch)...")
-    _verify_rattle_invariant(A, HALF_TOL, num_directions=36)
-
-    # 5. Full rattle computation
-    print("\n[5] Computing rattle for all 100k assembly states (36 directions)...")
-    rattle_all = compute_rattle_from_assembly(q_samples, A, HALF_TOL, num_directions=36)
-    # rattle_all shape: (100k, 36)
-    # Direction 0 → +X, direction 18 → -X (opposite)
-    rattle_fwd_x = rattle_all[:, 0]
-    rattle_bwd_x = rattle_all[:, 18]
-    rattle_fwd_y = rattle_all[:, 9]   # direction π/2 → +Y
-    rattle_bwd_y = rattle_all[:, 27]  # direction 3π/2 → -Y
-
-    max_rattle_any = rattle_all.max(axis=1)
-
-    # 6. Plots
-    print("\n[6] Generating plots...")
-    plot_feasible_envelope(envelope, A, HALF_TOL, q_samples)
-    plot_rattle_analysis(q_samples, rattle_fwd_x, rattle_bwd_x, dx_max, dy_max)
-
-    assembly_stats = {
-        'dx_mean': q_samples[:, 0].mean() * 1e3,
-        'dx_std':  q_samples[:, 0].std()  * 1e3,
-        'dx_p95':  np.percentile(np.abs(q_samples[:, 0]), 95) * 1e3,
-        'dy_mean': q_samples[:, 1].mean() * 1e3,
-        'dy_std':  q_samples[:, 1].std()  * 1e3,
-        'dy_p95':  np.percentile(np.abs(q_samples[:, 1]), 95) * 1e3,
-    }
-    rattle_stats = {
-        'p95': np.percentile(max_rattle_any, 95),
-        'p99': np.percentile(max_rattle_any, 99),
-    }
-    lp_info = {
-        'dx_max':    dx_max,
-        'dy_max':    dy_max,
-        'dtheta_max': dtheta_max,
-        'envelope':  envelope,
-    }
-    plot_summary_for_assembly_team(lp_info, assembly_stats, rattle_stats)
-
-    # 7. Summary
-    print()
-    print("=" * 60)
-    print("  === BOUNDING RESULTS FOR ASSEMBLY TEAM ===")
-    print()
-    print("  LP Feasible Bounds (EXACT):")
-    print(f"    Max VV centre displacement:  ±{dx_max*1e3:.3f} mm (X),  ±{dy_max*1e3:.3f} mm (Y)")
-    print(f"    Max VV rotation:             ±{dtheta_max*1e3:.4f} mrad")
-    print()
-    print("  Total Rattle Range (CONSTANT, all assembly positions):")
-    print(f"    X-direction: {2*dx_max*1e3:.3f} mm total range")
-    print(f"    Y-direction: {2*dy_max*1e3:.3f} mm total range")
-    print()
-    print("  Assembly Position Distribution (100k MC samples):")
-    print(f"    X offset: mean={assembly_stats['dx_mean']:.4f}, "
-          f"std={assembly_stats['dx_std']:.4f}, |95th|={assembly_stats['dx_p95']:.4f} mm")
-    print(f"    Y offset: mean={assembly_stats['dy_mean']:.4f}, "
-          f"std={assembly_stats['dy_std']:.4f}, |95th|={assembly_stats['dy_p95']:.4f} mm")
-    print()
-    print("  Rattle from assembly (max in any direction):")
-    print(f"    95th percentile: {rattle_stats['p95']*1e3:.4f} mm")
-    print(f"    99th percentile: {rattle_stats['p99']*1e3:.4f} mm")
-    print("=" * 60)
-
+    print("="*60)
+    print("ITER VV Rattle MC — Correct LP Physics")
+    print("="*60)
+    
+    # Step 1: Verify key cases
+    A, A_pinv, positions, angles, toroidal_dirs = build_geometry()
+    print("\nVERIFICATION of key cases:")
+    u_alternating = np.array([HALF_TOL if i%2==0 else -HALF_TOL for i in range(NUM_SUPPORTS)])
+    rattle_alt = max_rattle_magnitude(u_alternating, A, HALF_TOL, 36)
+    print(f"  Alternating case max rattle: {rattle_alt*1000:.6f} mm  (expect ~0)")
+    
+    u_nominal = np.zeros(NUM_SUPPORTS)
+    rattle_nom = max_rattle_magnitude(u_nominal, A, HALF_TOL, 36)
+    print(f"  Nominal case max rattle:     {rattle_nom*1000:.4f} mm  (expect ~1.547)")
+    
+    # Step 2: Demonstration plots
+    print("\nGenerating physics demonstration plots...")
+    plot_demonstration()
+    
+    # Step 3: MC
+    A2, u_samples, assembly_pos, max_rattles = run_mc_simulation(N_samples=2000)
+    
+    # Step 4: MC results plots
+    print("\nGenerating MC results plots...")
+    stats = plot_mc_results(A2, u_samples, assembly_pos, max_rattles)
+    
+    print("\n" + "="*60)
+    print("RESULTS FOR ASSEMBLY TEAM")
+    print("="*60)
+    print(f"  Max rattle (P95): {stats['p95_mm']:.3f} mm")
+    print(f"  Max rattle (P99): {stats['p99_mm']:.3f} mm")
+    print(f"  Max rattle (worst case): {stats['max_mm']:.3f} mm")
+    print(f"  +X rattle P95: {stats['rattle_px_p95']:.3f} mm")
+    print(f"\nPlots saved to plots/")
 
 if __name__ == "__main__":
     main()
