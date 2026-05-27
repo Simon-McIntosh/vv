@@ -49,12 +49,12 @@ assembly slot</strong> and is largely irreducible by assembly control. A separat
 <strong>±187.5 µrad rotation</strong> mode is n=0 (it does not perturb the plasma–wall gap).
 </div>
 
-<div class="callout warn">
-<strong>Assumption (governs every number ×2):</strong> the toroidal slot allowance is
-taken as <strong>±1.5 mm (3 mm total travel)</strong> about the assembly position, per the
-design intent. If the true allowance is ±3 mm (6 mm slot), every figure below
-<em>doubles</em> (range 3.09→6.19 mm, rotation ±187.5→±375 µrad). This should be confirmed
-against the as-built gravity-support specification before the numbers are used.
+<div class="callout ok">
+<strong>Slot allowance — confirmed:</strong> the toroidal slot allowance is
+<strong>±1.5 mm (3 mm total travel)</strong> about the assembly position, confirmed against
+the gravity-support design (2026-05-27). All figures below use this value. The analysis is
+exactly linear in the gap (a ±3 mm slot would double every number), so the confirmed ±1.5 mm
+fixes the scale.
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════ §1 -->
@@ -348,7 +348,7 @@ distinct, independent mode. During the translation optimum rotation contributes 
 <tr><td>4</td><td>Assess the <strong>dynamic impact loads on the gravity supports</strong> from EM-driven motion across the ±1.5 mm gap (disruptions/VDEs/halo currents), and the <strong>fatigue</strong> from repeated impact cycling over machine life</td><td><span class="badge bad-b">ACTION REQUIRED</span></td></tr>
 <tr><td>5</td><td>The bound is set by the <strong>3 mm toroidal slot</strong> and is largely irreducible by assembly control; reducing the lateral rattle means reducing the slot/tolerance or adding toroidal restraint</td><td><span class="badge warn-b">DESIGN LEVER</span></td></tr>
 <tr><td>6</td><td>Gap metrology gives little benefit until ≥ 5 sectors are measured; with one sector landed the bound is unchanged. Confirm whether "landed" implies a measured gap</td><td><span class="badge warn-b">RECOMMENDED</span></td></tr>
-<tr><td>7</td><td>Confirm the <strong>±1.5 mm vs ±3 mm</strong> slot interpretation against the as-built GS spec — it scales every number by 2×</td><td><span class="badge bad-b">VERIFY</span></td></tr>
+<tr><td>7</td><td>Toroidal slot allowance <strong>±1.5 mm (3 mm total)</strong> confirmed against the GS design (2026-05-27); all numbers scale linearly with the slot</td><td><span class="badge ok-b">CONFIRMED</span></td></tr>
 <tr><td>8</td><td>Treat the ±187.5 µrad rotation (n=0) as a separate local-alignment case for ports/penetrations, not part of the n=1 budget</td><td><span class="badge warn-b">NOTED</span></td></tr>
 </table>
 

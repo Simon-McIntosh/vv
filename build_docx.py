@@ -181,12 +181,13 @@ def main():
          "(it does not perturb the plasma–wall gap).", False),
     ], title="Key result:")
 
-    callout(doc, "warn", [
-        ("the toroidal slot allowance is taken as ", False),
+    callout(doc, "ok", [
+        ("the toroidal slot allowance is ", False),
         ("±1.5 mm (3 mm total travel)", True),
-        (". If it is actually ±3 mm, every number below doubles. Confirm against the "
-         "as-built gravity-support specification.", False),
-    ], title="Assumption (×2 sensitivity):")
+        (", confirmed against the gravity-support design (2026-05-27). The analysis is linear "
+         "in the gap, so a ±3 mm slot would double every number; the confirmed ±1.5 mm fixes "
+         "the scale.", False),
+    ], title="Slot allowance — confirmed:")
 
     heading2(doc, "1 — Physical mechanism")
     body(doc, [("The VV rests on ", False), ("9 gravity supports", True),
@@ -283,7 +284,7 @@ def main():
         ["4", "Assess dynamic impact loads on the gravity supports from EM-driven motion across the ±1.5 mm gap, and fatigue from repeated impact cycling."],
         ["5", "The bound is set by the 3 mm toroidal slot and is largely irreducible by assembly control — the lever is the tolerance or added toroidal restraint."],
         ["6", "Gap metrology gives little benefit until ≥ 5 sectors are measured; confirm whether 'landed' implies a measured gap."],
-        ["7", "Confirm the ±1.5 mm vs ±3 mm slot interpretation against the as-built GS spec (scales every number ×2)."],
+        ["7", "Slot allowance ±1.5 mm (3 mm total) confirmed against the GS design (2026-05-27); numbers scale linearly with the slot."],
         ["8", "Treat the ±187.5 µrad rotation (n=0) as a separate local-alignment case for ports/penetrations."],
     ])
 

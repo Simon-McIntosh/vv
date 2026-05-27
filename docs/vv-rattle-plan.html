@@ -4,13 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="docs-project" content="vv">
-  <meta name="plan-slug"    content="vv-rattle-plan">
-  <meta name="plan-title"   content="VV Rattle MC Analysis">
-  <meta name="plan-status"  content="in-progress">
-  <meta name="plan-roi"     content="high">
-  <meta name="plan-effort"  content="M">
-  <meta name="plan-tier"    content="sonnet">
-  <meta name="plan-summary" content="LP rattle analysis: P95=2.28mm, P99=2.56mm, worst=2.90mm from 5000-sample MC">
+  <meta name="plan-slug" content="vv-rattle-plan">
+  <meta name="plan-title" content="VV Rattle MC Analysis">
+  <meta name="plan-status" content="in-progress">
+  <meta name="plan-roi" content="high">
+  <meta name="plan-effort" content="M">
+  <meta name="plan-tier" content="sonnet">
+  <meta name="plan-summary" content="Peak-to-peak n=1 rattle: ceiling 3.09mm (nominal=worst case), MC P95=3.01mm; reproducible generator + HTML/Word reports">
   <title>VV Rattle MC Analysis · vv</title>
   <link rel="stylesheet" href="/_shared/foundation.css">
   <link rel="stylesheet" href="/_shared/dashboard.css">
@@ -28,6 +28,9 @@
     .plot-caption { font-size: 0.9em; color: #555; margin-top: 0.5em; font-style: italic; }
     .highlight { background: #fffbe6; border: 1px solid #e8c840; padding: 0.2em 0.5em; border-radius: 3px; }
   </style>
+<meta name="reckon-type" content="plan">
+<meta name="plan-modified" content="2026-05-27">
+<meta name="plan-version" content="1">
 </head>
 <body>
 <main class="plan-doc">
@@ -53,20 +56,24 @@
 
   <h2 id="s2">§2 — Current Status</h2>
   <div class="callout callout-ok">
-    <strong>✅ Correct LP physics implemented and verified:</strong>
+    <strong>✅ Analysis complete and verified — revised to the peak-to-peak / n=1 metric (2026-05-27):</strong>
     <ul>
-      <li><code>vv_rattle_mc.py</code> — correct LP-based rattle simulation (scipy HiGHS)</li>
-      <li>Alternating-case verification: 0.000mm rattle ✓ (VV completely locked)</li>
-      <li>Nominal case: 1.547mm ✓ (matches analytic LP bound)</li>
-      <li>5000-sample MC completed: P95 = 2.28mm, P99 = 2.56mm, worst = 2.90mm</li>
+      <li>Rattle metric = <strong>peak-to-peak range</strong> (the n=1 first-wall displacement envelope), replacing the earlier one-sided magnitude.</li>
+      <li>Nominal (u=0) range = <strong>3.093 mm</strong> ✓ — a hard theoretical ceiling and the worst case (the assembly team's centred target).</li>
+      <li>Alternating-case verification: 0.000 mm ✓ (VV completely locked).</li>
+      <li>5000-sample MC (reproducible, seed 20260527): <strong>P95 = 3.01 mm</strong>, P99 = 3.09 mm, median 2.24 mm, mode 2.49 mm.</li>
+      <li>Toroidal slot ±1.5 mm (3 mm total) <strong>confirmed</strong> against the gravity-support design.</li>
+      <li>Rotation ±187.5 µrad is a separate <strong>n=0</strong> mode (does not perturb the plasma–wall gap).</li>
     </ul>
   </div>
 
-  <div class="callout callout-warn">
-    <strong>⚠️ Known bugs in original code (not yet fixed):</strong>
+  <div class="callout callout-ok">
+    <strong>✅ Codebase cleaned and made traceable:</strong>
     <ul>
-      <li><code>bounding_box_analysis.py</code>: pseudoinverse gives 1.920mm but true LP = 1.547mm (24% overestimate, physically infeasible — support displacements reach 2.086mm &gt; 1.5mm limit)</li>
-      <li><code>iter_vv_monte_carlo.py</code>: computes assembly position PDF (not rattle). Superseded by <code>vv_rattle_mc.py</code>.</li>
+      <li><code>bounding_box_analysis.py</code> and <code>iter_vv_monte_carlo.py</code> (pseudoinverse / wrong-question approaches) <strong>removed</strong> from the repo.</li>
+      <li><code>vv_mc_generator.py</code> added — committed, seeded MC → <code>data/</code>; every report number regenerates from the repo.</li>
+      <li><code>main.py</code> updated to run the canonical pipeline (generator → <code>vv_viz</code>).</li>
+      <li>Deliverables: <code>docs/vv-research-findings.html</code> (served report), <code>docs/vv-rattle-report.docx</code> (Word report with GIFs), <code>docs/vv-previous-analysis-critique.html</code>.</li>
     </ul>
   </div>
 
@@ -74,10 +81,11 @@
   <table>
     <thead><tr><th>File</th><th>Status</th><th>Purpose</th></tr></thead>
     <tbody>
-      <tr><td><code>vv_rattle_mc.py</code></td><td>✅ Correct</td><td>LP rattle MC — the authoritative simulation</td></tr>
-      <tr><td><code>bounding_box_analysis.py</code></td><td>⚠️ Buggy</td><td>LP envelope (correct structure, wrong solver in find_extreme_position)</td></tr>
-      <tr><td><code>iter_vv_monte_carlo.py</code></td><td>⚠️ Superseded</td><td>Assembly position PDF only, not rattle</td></tr>
-      <tr><td><code>main.py</code></td><td>⚠️ Stale</td><td>Needs updating to call vv_rattle_mc.main()</td></tr>
+      <tr><td><code>vv_mc_generator.py</code></td><td>✅ Canonical</td><td>Seeded 5000-sample peak-to-peak MC → committed <code>data/</code></td></tr>
+      <tr><td><code>vv_viz.py</code></td><td>✅ Current</td><td>Figures, GIFs, strips (linkage-tracking graphics)</td></tr>
+      <tr><td><code>build_docx.py</code></td><td>✅ Current</td><td>Word report builder</td></tr>
+      <tr><td><code>main.py</code></td><td>✅ Updated</td><td>Runs the canonical pipeline (generator → vv_viz)</td></tr>
+      <tr><td><code>vv_rattle_mc.py</code></td><td>ℹ️ Supplementary</td><td>LP / pseudoinverse verification (one-sided reach metric)</td></tr>
     </tbody>
   </table>
 
@@ -126,38 +134,40 @@
   s.t.  A·δq ≤ g⁺   (forward gap constraints)
        −A·δq ≤ g⁻   (backward gap constraints)</pre>
   <p>
-    The rattle magnitude for a given assembly state is the maximum over all directions
-    <code>θ ∈ [0, 2π)</code>. This is solved via <code>scipy.optimize.linprog</code>
-    with the HiGHS method.
+    The <strong>rattle range</strong> for a given assembly state is the full peak-to-peak span
+    of the reachable centre positions, <code>max<sub>θ</sub> [reach(θ) + reach(θ+π)]</code>,
+    solved via <code>scipy.optimize.linprog</code> (HiGHS). This is the n=1 first-wall
+    displacement envelope. (The one-sided reach — half of this for the symmetric nominal
+    polytope — is a separate quantity and is not used as the bound.)
   </p>
 
-  <h3>Key insight: rattle depends on assembly state</h3>
+  <h3>Key insight: nominal assembly is the worst case</h3>
   <p>
-    Unlike the absolute LP bounds (which are fixed by geometry), the rattle from a given
-    assembly state depends critically on <em>how</em> the supports landed:
+    For the peak-to-peak range the nominal (centred) assembly is provably the maximum;
+    offset assemblies can only reduce it:
   </p>
   <ul>
     <li>
       <strong>Alternating state</strong> (<code>u = [+1.5, −1.5, +1.5, …] mm</code>):
-      each adjacent pair of supports blocks motion in opposite directions.
-      The VV is completely locked — <span class="highlight">rattle = 0.000 mm ✓</span>.
+      adjacent supports block opposite motions — the VV is completely locked,
+      <span class="highlight">range = 0.000 mm ✓</span>.
     </li>
     <li>
-      <strong>Nominal state</strong> (<code>u = 0</code> for all supports):
-      symmetric gaps in both directions — <span class="highlight">rattle = 1.547 mm</span>
-      (equals the LP bound for the nominal case).
+      <strong>Nominal state</strong> (<code>u = 0</code>):
+      <span class="highlight">range = 3.093 mm</span> — the hard theoretical ceiling and the
+      worst case (one-sided reach 1.547 mm each way).
     </li>
     <li>
-      <strong>Worst-case assembly</strong>: supports pre-loaded in one direction free up
-      gap in the opposite direction, allowing the VV to rattle further.
-      MC P95 = <span class="highlight">2.282 mm</span>, worst observed = <span class="highlight">2.896 mm</span>.
+      <strong>Random assemblies</strong>: the range varies below the ceiling — MC median
+      2.24 mm, <span class="highlight">P95 = 3.01 mm</span>, P99 3.09 mm, min 0.23 mm.
     </li>
   </ul>
   <p>
-    The absolute upper bound on rattle is 2 × 1.547 mm = 3.094 mm (if the VV assembles
-    at one extreme of the LP envelope, it can rattle to the opposite extreme). In practice
-    this exact configuration cannot occur simultaneously for all supports, so the MC
-    worst case (2.896 mm from 5000 samples) approaches but does not reach this limit.
+    Because the assembly team aims to centre the brackets (<code>u ≈ 0</code>) — the worst
+    case — the governing design number is the <strong>3.093 mm ceiling</strong>, not a lower
+    percentile. The earlier one-sided "magnitude" framing (in which offset assemblies appeared
+    to rattle <em>further</em> from their as-built position, P95 2.28 mm) measured a different
+    quantity and is superseded by the peak-to-peak range used here.
   </p>
 
   <div class="plot-container">
@@ -199,120 +209,99 @@
     </tbody>
   </table>
 
-  <h3>MC Rattle Statistics (5000 samples, correct LP)</h3>
+  <h3>MC Rattle Statistics (5000 samples, peak-to-peak range, seed 20260527)</h3>
   <table>
-    <thead><tr><th>Statistic</th><th>Max rattle (any dir.)</th><th>+X direction</th><th>+Y direction</th></tr></thead>
+    <thead><tr><th>Statistic</th><th>Peak-to-peak range</th><th>One-sided reach (½, nominal)</th></tr></thead>
     <tbody>
-      <tr><td>Mean</td><td>1.522 mm</td><td>0.772 mm</td><td>0.769 mm</td></tr>
-      <tr><td>Median (P50)</td><td>1.514 mm</td><td>0.775 mm</td><td>0.773 mm</td></tr>
-      <tr><td>P75</td><td>1.838 mm</td><td>1.109 mm</td><td>1.100 mm</td></tr>
-      <tr><td>P90</td><td>2.119 mm</td><td>1.357 mm</td><td>1.345 mm</td></tr>
-      <tr><td><strong>P95</strong></td><td><strong>2.282 mm</strong></td><td>1.473 mm</td><td>1.455 mm</td></tr>
-      <tr><td>P99</td><td>2.556 mm</td><td>1.534 mm</td><td>1.516 mm</td></tr>
-      <tr><td>Worst case (n=5000)</td><td>2.896 mm</td><td>1.547 mm</td><td>1.523 mm</td></tr>
-      <tr><td>Absolute upper bound</td><td>3.094 mm</td><td>1.547 mm</td><td>1.523 mm</td></tr>
+      <tr><td>Median (P50)</td><td>2.244 mm</td><td>1.122 mm</td></tr>
+      <tr><td>Mode</td><td>2.49 mm</td><td>—</td></tr>
+      <tr><td>P90</td><td>2.897 mm</td><td>—</td></tr>
+      <tr><td><strong>P95</strong></td><td><strong>3.013 mm</strong></td><td>—</td></tr>
+      <tr><td>P99</td><td>3.092 mm</td><td>—</td></tr>
+      <tr><td>Worst observed (n=5000)</td><td>3.093 mm</td><td>—</td></tr>
+      <tr><td><strong>Nominal = ceiling (hard max)</strong></td><td><strong>3.093 mm</strong></td><td>1.547 mm</td></tr>
     </tbody>
   </table>
 
   <div class="callout callout-info">
     <strong>Key message for assembly team:</strong>
     <ul>
-      <li>In 95% of assembly configurations, the VV can rattle at most <strong>2.28mm</strong> in any direction from where it was placed.</li>
-      <li>The worst physically possible rattle is <strong>3.09mm</strong> (absolute LP bound × 2), never observed in practice.</li>
-      <li>An unfavourable (alternating) assembly state locks the VV completely (0mm rattle).</li>
-      <li>The nominal (centred) assembly allows 1.547mm rattle in X and 1.523mm in Y.</li>
+      <li>The governing design number is <strong>3.09 mm peak-to-peak</strong> (the n=1 first-wall displacement envelope) — the centred assembly is the worst case and is the assembly team's target.</li>
+      <li>95% of random assemblies give a range ≤ <strong>3.01 mm</strong>, barely below the ceiling — assembly scatter gives little relief.</li>
+      <li>An unfavourable (alternating) assembly state locks the VV completely (0 mm).</li>
+      <li>Measuring gaps reveals the as-built value (most likely near the 2.49 mm mode); it does not relieve the bound, and one sector landed gives no meaningful change.</li>
     </ul>
   </div>
 
-  <h2 id="s6">§6 — Analysis Gaps and Remaining Work</h2>
+  <h2 id="s6">§6 — Status of Remaining Work</h2>
   <ol>
-    <li>
-      <strong>Fix <code>bounding_box_analysis.py</code></strong> — replace pseudoinverse
-      with scipy LP in <code>find_extreme_position()</code>. Low risk, straightforward.
-    </li>
-    <li>
-      <strong>Update <code>main.py</code></strong> — wire up to call
-      <code>vv_rattle_mc.main()</code>; single entry point for reproducibility.
-    </li>
-    <li>
-      <strong>Larger MC run (20k+ samples)</strong> — better P99/P99.9 tail statistics.
-      5000 samples gives ~50 samples above P99; 20k gives 200+.
-    </li>
-    <li>
-      <strong>Displacement at attachment radii</strong> — the ±0.1875 mrad rotation
-      adds displacement at interior components (0.563mm at R=3m inner equipment).
-      Full envelope at multiple radii needed for clearance checks.
-    </li>
-    <li>
-      <strong>Assembly team report</strong> — standalone self-contained HTML report
-      with only the key numbers, plots, and guidance. No code review history.
-    </li>
+    <li><strong>✅ Done — codebase cleanup &amp; traceability:</strong>
+      <code>bounding_box_analysis.py</code> and <code>iter_vv_monte_carlo.py</code> removed
+      (superseded pseudoinverse approaches); <code>main.py</code> now runs the canonical
+      pipeline; <code>vv_mc_generator.py</code> added with committed seeded data.</li>
+    <li><strong>✅ Done — reports:</strong> served HTML report, Word report (with GIFs), and a
+      critique of the previous analysis are built and committed.</li>
+    <li><strong>✅ Done — metric &amp; inputs:</strong> standardised on the peak-to-peak range
+      (n=1 envelope); ±1.5 mm slot confirmed against the GS design.</li>
+    <li><strong>Open — dynamic / fatigue assessment:</strong> EM-driven impact at the end-stops
+      (shock loads on the gravity supports + fatigue from repeated cycling) needs a dynamic
+      analysis; out of scope for this kinematic study.</li>
+    <li><strong>Open — clearance at attachment radii:</strong> a peripheral point combines
+      translation with the ±187.5 µrad rotation (n=0 for the plasma gap, but it moves discrete
+      components); a full envelope at multiple radii is needed for component clearance checks.</li>
+    <li><strong>Optional — larger MC (20k+):</strong> tightens the P99/P99.9 tail; the P95 and
+      the 3.093 mm ceiling are already converged.</li>
   </ol>
 
   <section data-reckon="decisions" id="decisions" class="r-decisions">
-    <h2><span class="sec">§</span> Decisions</h2>
-
-    <div class="r-dec" data-key="lp-solver" data-choice="scipy-linprog"
-         data-by="smc" data-when="2025-05-27">
-      <p class="r-dec-q">Which LP solver for bounding and rattle computation?</p>
-      <p class="r-dec-opts">
-        <button class="r-opt chosen" data-value="scipy-linprog">scipy.optimize.linprog (HiGHS)</button>
-        <button class="r-opt" data-value="cvxpy">cvxpy</button>
+<h2><span class="sec">§</span> Decisions</h2>
+<div class="r-dec" data-key="lp-solver" data-choice="scipy-linprog" data-by="smc" data-when="2025-05-27">
+    <p class="r-dec-q">Which LP solver for bounding and rattle computation?</p>
+    <p class="r-dec-opts">
+      <button class="r-opt chosen" data-value="scipy-linprog">scipy.optimize.linprog (HiGHS)</button>
+      <button class="r-opt" data-value="cvxpy">cvxpy</button>
       </p>
-      <p class="r-dec-rat">Verified numerically. Pseudoinverse BANNED — gives infeasible solutions
+    <p class="r-dec-rat">Verified numerically. Pseudoinverse BANNED — gives infeasible solutions
       (τ_max=2.086mm &gt; 1.5mm limit). scipy HiGHS gives correct LP = 1.547mm and
       0.000mm for alternating case.</p>
     </div>
-
-    <div class="r-dec" data-key="rattle-physics" data-choice="independent-gaps"
-         data-by="smc" data-when="2025-05-27">
-      <p class="r-dec-q">How to model the assembly gap state for rattle LP?</p>
-      <p class="r-dec-opts">
-        <button class="r-opt chosen" data-value="independent-gaps">Use original uᵢ values (independent, as-measured gaps)</button>
-        <button class="r-opt" data-value="projected">Project via lstsq then use A@q₀</button>
+<div class="r-dec" data-key="rattle-physics" data-choice="independent-gaps" data-by="smc" data-when="2025-05-27">
+    <p class="r-dec-q">How to model the assembly gap state for rattle LP?</p>
+    <p class="r-dec-opts">
+      <button class="r-opt chosen" data-value="independent-gaps">Use original uᵢ values (independent, as-measured gaps)</button>
+      <button class="r-opt" data-value="projected">Project via lstsq then use A@q₀</button>
       </p>
-      <p class="r-dec-rat">Must use original uᵢ — they represent physical pin positions, not constrained
+    <p class="r-dec-rat">Must use original uᵢ — they represent physical pin positions, not constrained
       to Col(A). lstsq projection gives wrong remaining gaps: alternating case gives ~0 for q₀,
       so formula predicts 1.547mm rattle instead of correct 0mm. Verified: correct LP gives 0.000mm ✓.</p>
     </div>
-
-    <div class="r-dec" data-key="mc-sample-count" data-choice="" data-by="" data-when="">
-      <p class="r-dec-q">How many MC samples for the final deliverable?</p>
-      <p class="r-dec-opts">
-        <button class="r-opt" data-value="5k">5k (done, preliminary)</button>
-        <button class="r-opt" data-value="20k">20k (recommended — better tails)</button>
-        <button class="r-opt" data-value="100k">100k (exhaustive, ~40 min)</button>
+<div class="r-dec" data-key="mc-sample-count" data-choice="20k" data-by="user" data-when="2026-05-27 12:34">
+    <p class="r-dec-q">How many MC samples for the final deliverable?</p>
+    <p class="r-dec-opts">
+      <button class="r-opt" data-value="5k">5k (done, preliminary)</button>
+      <button class="r-opt chosen" data-value="20k">20k (recommended — better tails)</button>
+      <button class="r-opt" data-value="100k">100k (exhaustive, ~40 min)</button>
       </p>
-      <p class="r-dec-rat"></p>
+    <p class="r-dec-rat"></p>
     </div>
-  </section>
+</section>
 
   <section data-reckon="followups" id="followups" class="r-followups">
-    <h2><span class="sec">§</span> Followups</h2>
-    <article class="r-fu" data-id="f1" data-status="open" data-tier="sonnet"
-             data-written-by="smc" data-written-at="2025-05-27"
-             data-recommends-skill="/reckon-ship vv-rattle-plan"
-             data-resolved-at="" data-resolved-by="">
-      <h4 class="r-fu-title">Fix bounding_box_analysis.py and update main.py</h4>
-      <div class="r-fu-body">
-        <p>Replace pseudoinverse with scipy LP in <code>find_extreme_position()</code>.
-        Update <code>main.py</code> to call <code>vv_rattle_mc.main()</code>.</p>
-      </div>
-      <pre class="r-fu-prompt">Fix bounding_box_analysis.py: replace find_extreme_position() pseudoinverse approach with scipy.optimize.linprog (HiGHS). The pseudoinverse gives 1.920mm but the true LP = 1.547mm (24% overestimate, produces τ_max=2.086mm > 1.5mm limit). Also update main.py to import and call vv_rattle_mc.main(). Verify the fix by running both functions and checking dx_max ≈ 1.547mm. Commit immediately after each fix.</pre>
+<h2><span class="sec">§</span> Followups</h2>
+<article class="r-fu" data-id="f1" data-status="open" data-tier="sonnet" data-written-by="smc" data-written-at="2025-05-27" data-recommends-skill="/reckon-ship vv-rattle-plan" data-resolved-at="" data-resolved-by="">
+    <h4 class="r-fu-title">Fix bounding_box_analysis.py and update main.py</h4>
+    <div class="r-fu-body">Replace pseudoinverse with scipy LP in find_extreme_position() .
+        Update main.py to call vv_rattle_mc.main() .</div>
+    <pre class="r-fu-prompt">Fix bounding_box_analysis.py: replace find_extreme_position() pseudoinverse approach with scipy.optimize.linprog (HiGHS). The pseudoinverse gives 1.920mm but the true LP = 1.547mm (24% overestimate, produces τ_max=2.086mm &gt; 1.5mm limit). Also update main.py to import and call vv_rattle_mc.main(). Verify the fix by running both functions and checking dx_max ≈ 1.547mm. Commit immediately after each fix.</pre>
     </article>
-    <article class="r-fu" data-id="f2" data-status="open" data-tier="sonnet"
-             data-written-by="smc" data-written-at="2025-05-27"
-             data-recommends-skill="/reckon-ship vv-rattle-plan"
-             data-resolved-at="" data-resolved-by="">
-      <h4 class="r-fu-title">Run 20k-sample MC and produce assembly team report</h4>
-      <div class="r-fu-body">
-        <p>Run MC with 20k samples for better P99 tail statistics. Produce a standalone
+<article class="r-fu" data-id="f2" data-status="open" data-tier="sonnet" data-written-by="smc" data-written-at="2025-05-27" data-recommends-skill="/reckon-ship vv-rattle-plan" data-resolved-at="" data-resolved-by="">
+    <h4 class="r-fu-title">Run 20k-sample MC and produce assembly team report</h4>
+    <div class="r-fu-body">Run MC with 20k samples for better P99 tail statistics. Produce a standalone
         self-contained HTML report (base64 plots, key numbers table, assembly guidance).
-        Include displacement envelope at multiple attachment radii (R=1m, 3m, 5m).</p>
-      </div>
-      <pre class="r-fu-prompt">Run vv_rattle_mc.py with n_samples=20000. Then produce docs/vv-assembly-report.html — a self-contained deliverable for the ITER assembly team with: (1) key bounding numbers table (P95, P99, worst case in mm); (2) Figure 1 (physics demonstration) and Figure 2 (MC dashboard) embedded as base64; (3) displacement at R=1m, 3m, 5m (translation + rotation contribution); (4) assembly guidance text. Keep it factual and concise. No code review history in this document.</pre>
+        Include displacement envelope at multiple attachment radii (R=1m, 3m, 5m).</div>
+    <pre class="r-fu-prompt">Run vv_rattle_mc.py with n_samples=20000. Then produce docs/vv-assembly-report.html — a self-contained deliverable for the ITER assembly team with: (1) key bounding numbers table (P95, P99, worst case in mm); (2) Figure 1 (physics demonstration) and Figure 2 (MC dashboard) embedded as base64; (3) displacement at R=1m, 3m, 5m (translation + rotation contribution); (4) assembly guidance text. Keep it factual and concise. No code review history in this document.</pre>
     </article>
-  </section>
+</section>
 </main>
 </body>
 </html>
