@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="docs-project" content="vv">
+  <meta name="plan-slug"    content="vv-rattle-plan">
+  <meta name="plan-title"   content="VV Rattle MC Analysis">
+  <meta name="plan-status"  content="in-progress">
+  <meta name="plan-roi"     content="high">
+  <meta name="plan-effort"  content="M">
+  <meta name="plan-tier"    content="sonnet">
+  <meta name="plan-summary" content="LP-based bounding analysis: ±1.547mm X, ±1.523mm Y, 3.09mm total rattle">
+  <title>VV Rattle MC Analysis · vv</title>
+  <link rel="stylesheet" href="/_shared/foundation.css">
+  <link rel="stylesheet" href="/_shared/dashboard.css">
+</head>
+<body>
+<main class="plan-doc">
+  <h1>VV Rattle MC Analysis</h1>
+
+  <h2 id="s1">§1 — Project Summary</h2>
+  <p>
+    The ITER Vacuum Vessel (VV) rests on <strong>9 gravity supports</strong> equally spaced on
+    a circle of radius <code>R = 8 m</code>. Each support constrains the VV in the
+    <em>toroidal</em> direction only, with a gap of <code>3 mm</code> total
+    (<code>±1.5 mm</code> per support). The VV is therefore a rigid body with three
+    in-plane degrees of freedom — <code>dx</code>, <code>dy</code>, and <code>dθ</code> —
+    subject to 9 over-determined toroidal constraints solved via least-squares.
+  </p>
+  <p>
+    The assembly team needs <strong>bounding lateral displacement statistics</strong> to plan
+    clearance checks and installation sequencing. Specifically:
+  </p>
+  <ul>
+    <li>What is the maximum possible lateral displacement of the VV in X and Y from nominal?</li>
+    <li>After the VV is assembled into a given position, how much additional rattle remains?</li>
+    <li>What is the probability distribution of assembly positions within the bounding envelope?</li>
+  </ul>
+  <p>
+    The deliverable is a concise bounding report with key numbers (mm), distribution plots,
+    and clear guidance for assembly clearance requirements.
+  </p>
+
+  <h2 id="s2">§2 — Current Status</h2>
+  <h3>Files that exist</h3>
+  <ul>
+    <li>
+      <code>iter_vv_monte_carlo.py</code> — 100 k Monte Carlo samples; samples random toroidal
+      displacements uniformly over <code>[-1.5, +1.5] mm</code> per support; fits rigid-body
+      position <code>(dx, dy, dθ)</code> via <code>numpy.linalg.lstsq</code>; plots PDFs of
+      the resulting displacement distributions. <em>Limitation:</em> computes displacement from
+      nominal only — does not model the assembly state or remaining gap after initial pin placement.
+    </li>
+    <li>
+      <code>bounding_box_analysis.py</code> — computes the full reachable envelope using linear
+      optimisation (maximise/minimise <code>dx</code>, <code>dy</code>, <code>dθ</code> subject to
+      the toroidal gap constraints). This is the correct bounding analysis — it gives the
+      <em>absolute worst-case</em> displacement regardless of probability.
+    </li>
+    <li>
+      <code>main.py</code> — stub only; does not invoke either simulation.
+    </li>
+    <li>
+      <code>plots/</code> — displacement PDF plots already generated from
+      <code>iter_vv_monte_carlo.py</code>.
+    </li>
+  </ul>
+
+  <h3>Confirmed parameters</h3>
+  <ul>
+    <li>Toroidal tolerance: <code>TOROIDAL_TOLERANCE = 3e-3 m</code> → <code>±1.5 mm</code> per support ✓</li>
+    <li>Number of supports: <code>9</code>, evenly spaced on <code>R = 8 m</code> ✓</li>
+    <li>Estimated bounding box: approximately <code>±0.35 mm</code> in X and Y
+        (<code>~0.7 mm</code> range each axis) from geometric analysis</li>
+  </ul>
+
+  <div class="callout callout-warn">
+    <strong>⚠️ Bugs confirmed by numerical verification:</strong>
+    <ul>
+      <li><code>bounding_box_analysis.py</code>: pseudoinverse approach gives dx_max = 1.920 mm but produces support displacements of 2.086 mm &gt; 1.5 mm limit — <strong>24% overestimate</strong>, physically infeasible</li>
+      <li><code>iter_vv_monte_carlo.py</code>: samples 9 independent uniform values but a rigid body only has 3 DOFs — produces physically impossible states, biases MC low</li>
+    </ul>
+  </div>
+
+  <h2 id="s3">§3 — Physics Model</h2>
+  <h3>Rigid-body kinematics</h3>
+  <p>
+    The VV translates in the horizontal plane as a rigid body. Its configuration is described by
+    three DOFs: lateral translation <code>(dx, dy)</code> in metres and rotation
+    <code>dθ</code> in radians about the machine axis. The 9 gravity supports are located at
+    angles <code>φ_i = 2πi/9</code>, <code>i = 0, …, 8</code> on a circle of radius
+    <code>R = 8 m</code>. The toroidal unit vector at support <em>i</em> is
+    <code>t̂_i = (−sin φ_i, cos φ_i)</code>.
+  </p>
+  <p>
+    The toroidal displacement of support <em>i</em> due to rigid-body motion is:
+  </p>
+  <pre>  u_i = t̂_i · (dx, dy) + R · dθ</pre>
+  <p>
+    This gives a <strong>linear</strong> system <code>A · [dx, dy, dθ]ᵀ = u</code> where
+    <code>A</code> is the <em>9×3</em> kinematic matrix. Because the system is over-determined
+    the pseudo-inverse (lstsq) gives the best-fit rigid-body state for any realised gap vector
+    <code>u</code>.
+  </p>
+
+  <h3>Full bounding envelope</h3>
+  <p>
+    The maximum achievable displacement in any direction is found by solving the linear programme:
+  </p>
+  <pre>  maximise   c · [dx, dy, dθ]ᵀ
+  subject to |u_i| ≤ 1.5 mm  for all i = 0, …, 8</pre>
+  <p>
+    <code>bounding_box_analysis.py</code> sweeps over objective directions
+    <code>c = ±ê_x, ±ê_y, ±ê_θ</code> to produce the full reachable box. The result is the
+    <em>absolute worst-case</em> envelope — any assembly state lies within it.
+  </p>
+
+  <h3>Assembly-condition rattle</h3>
+  <p>
+    After the VV is pinned into assembly position <code>X₀ = (dx₀, dy₀, dθ₀)</code>
+    (realised by initial pin gaps <code>u_i⁰</code>), the remaining gap at support <em>i</em>
+    is:
+  </p>
+  <pre>  Δu_i⁺ = +1.5 mm − u_i⁰   (room to move in + direction)
+  Δu_i⁻ = −1.5 mm − u_i⁰   (room to move in − direction)</pre>
+  <p>
+    The maximum additional translation from assembly state <code>X₀</code> in the +X direction
+    is then:
+  </p>
+  <pre>  max_rattle_+X(X₀) = x_max − dx₀</pre>
+  <p>
+    where <code>x_max</code> is the bounding-box upper limit on <code>dx</code>. The total
+    rattle range is:
+  </p>
+  <pre>  rattle_range_X = x_max − x_min = constant (independent of assembly state)</pre>
+  <p>
+    This means the <strong>MC distribution</strong> characterises the probability that the VV
+    assembles near a corner of the envelope (worst-case remaining rattle) versus near the centre
+    (balanced remaining rattle).
+  </p>
+
+  <h2 id="s4">§4 — Analysis Gaps</h2>
+  <p>The following work items are outstanding before the assembly team deliverable can be issued:</p>
+  <ol>
+    <li>
+      <strong>Assembly-condition MC</strong> — a new simulation that:
+      <ol type="a">
+        <li>Samples initial pin positions <code>u_i⁰ ~ Uniform(−1.5, +1.5) mm</code>
+            independently for each support;</li>
+        <li>Computes the best-fit assembly position <code>X₀</code> via lstsq;</li>
+        <li>Computes remaining gaps <code>Δu_i±</code>;</li>
+        <li>Solves the conditional LP to find maximum additional displacement from
+            <code>X₀</code> in ±X, ±Y directions;</li>
+        <li>Accumulates statistics over ≥ 100 k samples.</li>
+      </ol>
+    </li>
+    <li>
+      <strong>Vectorized implementation</strong> — current code loops over samples in Python.
+      Replace with batched <code>numpy</code> operations: precompute <code>A⁺</code> (pseudo-inverse)
+      once; matrix-multiply all samples simultaneously. Target: &lt; 5 s for 1 M samples.
+    </li>
+    <li>
+      <strong>Assembly team report</strong> — clear table of bounding numbers:
+      <code>x_range</code>, <code>y_range</code>, <code>max radial displacement</code>,
+      <code>max rattle from worst-case assembly</code> with units in mm.
+    </li>
+    <li>
+      <strong><code>main.py</code> integration</strong> — wire up both simulations so a single
+      <code>python main.py</code> reproduces all results and writes all plots.
+    </li>
+    <li>
+      <strong>HTML report with embedded plots</strong> — self-contained HTML output with base-64
+      embedded figures, suitable for distribution without file-system dependencies.
+    </li>
+  </ol>
+
+  <h2 id="s5">§5 — Implementation Roadmap</h2>
+  <h3>Phase 1 — Assembly-condition MC module</h3>
+  <p>
+    Create <code>vv_rattle_mc.py</code> with a vectorized assembly Monte Carlo. Key functions:
+  </p>
+  <ul>
+    <li><code>build_kinematic_matrix(n=9, R=8.0)</code> — returns <em>9×3</em> matrix <code>A</code>
+        and its pseudo-inverse <code>A⁺</code>.</li>
+    <li><code>sample_assembly_positions(n_samples, tol=1.5e-3, rng=None)</code> — draws
+        <code>(n_samples × 9)</code> gap matrix, returns <code>(n_samples × 3)</code>
+        assembly states via <code>A⁺ @ u.T</code>.</li>
+    <li><code>bounding_box(A, tol=1.5e-3)</code> — LP-based envelope (wraps
+        <code>scipy.optimize.linprog</code>).</li>
+    <li><code>rattle_statistics(X0_samples, bbox)</code> — computes remaining-rattle
+        distributions and worst-case values.</li>
+    <li><code>plot_assembly_distribution(X0_samples, bbox, outdir)</code> — 2-panel figure:
+        <code>dx</code> vs <code>dy</code> scatter + marginal PDFs with bounding box overlay.</li>
+  </ul>
+
+  <h3>Phase 2 — Run analysis, generate bounding plots</h3>
+  <ul>
+    <li>Run <code>vv_rattle_mc.py</code> with <code>n_samples = 1_000_000</code>.</li>
+    <li>Write <code>plots/assembly_distribution.png</code> and
+        <code>plots/rattle_cdf.png</code>.</li>
+    <li>Print bounding numbers table to stdout and to <code>results/bounding_numbers.txt</code>.</li>
+  </ul>
+
+  <h3>Phase 3 — HTML report with embedded results</h3>
+  <ul>
+    <li>Create <code>reports/vv_rattle_report.html</code> — self-contained, base-64 plots,
+        bounding table, physics summary section.</li>
+    <li>Readable without a web server; suitable for email distribution.</li>
+  </ul>
+
+  <h3>Phase 4 — Assembly team deliverable</h3>
+  <ul>
+    <li>Final review of numbers against independently calculated geometric bound.</li>
+    <li>Update <code>main.py</code> to orchestrate Phases 1–3 end-to-end.</li>
+    <li>Tag release, archive plots and report.</li>
+  </ul>
+
+  <h2 id="s6">§6 — Key Results</h2>
+  <h3>Verified LP Bounds (scipy HiGHS, feasible solutions)</h3>
+  <table>
+    <thead><tr><th>Quantity</th><th>Value</th><th>Method</th></tr></thead>
+    <tbody>
+      <tr><td>Max VV center displacement (X)</td><td>±1.547 mm</td><td>LP (scipy HiGHS)</td></tr>
+      <tr><td>Max VV center displacement (Y)</td><td>±1.523 mm</td><td>LP (scipy HiGHS)</td></tr>
+      <tr><td>Max VV rotation (θ)</td><td>±0.1875 mrad</td><td>Analytic (= δ/R)</td></tr>
+      <tr><td>Total X rattle range</td><td>3.093 mm</td><td>LP (constant, all assemblies)</td></tr>
+      <tr><td>Total Y rattle range</td><td>3.046 mm</td><td>LP (constant, all assemblies)</td></tr>
+      <tr><td>Pseudoinverse dx_max (WRONG)</td><td>1.920 mm</td><td>Infeasible — 24% overestimate</td></tr>
+    </tbody>
+  </table>
+  <p>The total rattle range is <strong>constant regardless of assembly position</strong>: the VV can always traverse the full 3.093 mm in X and 3.046 mm in Y, but the split between forward and backward depends on where it was assembled.</p>
+
+  <section data-reckon="decisions" id="decisions" class="r-decisions">
+    <h2><span class="sec">§</span> Decisions</h2>
+    <div class="r-dec" data-key="mc-sample-count" data-choice="" data-by="" data-when="">
+      <p class="r-dec-q">How many MC samples for the assembly-condition simulation?</p>
+      <p class="r-dec-opts">
+        <button class="r-opt" data-value="100k">100 k (fast, ~0.1 s)</button>
+        <button class="r-opt" data-value="1M">1 M (thorough, ~1 s)</button>
+        <button class="r-opt" data-value="10M">10 M (exhaustive, ~10 s)</button>
+      </p>
+      <p class="r-dec-rat"></p>
+    </div>
+    <div class="r-dec" data-key="report-format" data-choice="" data-by="" data-when="">
+      <p class="r-dec-q">What format for the assembly team deliverable?</p>
+      <p class="r-dec-opts">
+        <button class="r-opt" data-value="html-embedded">Self-contained HTML (base-64 plots)</button>
+        <button class="r-opt" data-value="pdf">PDF via WeasyPrint / LaTeX</button>
+        <button class="r-opt" data-value="notebook">Jupyter notebook</button>
+      </p>
+      <p class="r-dec-rat"></p>
+    </div>
+    <div class="r-dec" data-key="lp-solver" data-choice="" data-by="" data-when="">
+      <p class="r-dec-q">Which LP solver for the bounding box / conditional rattle computation?</p>
+      <p class="r-dec-opts">
+        <button class="r-opt" data-value="scipy-linprog">scipy.optimize.linprog (HiGHS, no extra deps)</button>
+        <button class="r-opt" data-value="cvxpy">cvxpy (cleaner API, extra install)</button>
+      </p>
+      <p class="r-dec-rat"></p>
+    </div>
+    <article class="r-decision r-decision--locked">
+      <h3>LP solver for bounding analysis</h3>
+      <p><strong>Decision:</strong> Use <code>scipy.optimize.linprog</code> with HiGHS method for all envelope calculations. The pseudoinverse approach is BANNED — it produces physically infeasible solutions (violates support gap constraints by 24%).</p>
+      <p><strong>Rationale:</strong> Verified numerically: pseudoinverse dx_max = 1.920 mm causes tau_max = 2.086 mm > 1.5 mm limit. True LP = 1.547 mm (feasible).</p>
+      <footer><time>2026-05-27</time></footer>
+    </article>
+  </section>
+
+  <section data-reckon="followups" id="followups" class="r-followups">
+    <h2><span class="sec">§</span> Followups</h2>
+    <article class="r-followup">
+      <h3>Add rotation displacement at attachment radius</h3>
+      <p>The ±0.1875 mrad rotation causes displacements at interior components. At R=3m (inner equipment): 0.56 mm additional. At R=1m: 0.188 mm. The assembly team needs displacement envelope at <em>component</em> radii, not just VV center.</p>
+    </article>
+    <article class="r-followup">
+      <h3>Characterize assembly position distribution statistics</h3>
+      <p>Once <code>vv_rattle_mc.py</code> is running, populate the Key Results section with: assembly position PDF statistics (mean, std, P95, P99 in X and Y), acceptance rate of rejection sampler, comparison of old MC vs LP bounds.</p>
+    </article>
+  </section>
+</main>
+</body>
+</html>
