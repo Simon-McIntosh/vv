@@ -14,13 +14,19 @@ Constraint model: the toroidal slide at support i when the VV moves by
 [Δx, Δy, Δθ] is   δᵢ = −sin(φᵢ)·Δx + cos(φᵢ)·Δy + R·Δθ   (=  A[i,:]·q).
 The bracket must satisfy  |u_assembly,i + δᵢ| ≤ 1.5 mm  at every support.
 
-Diagram conventions
--------------------
-  ·  Toroidal travel range :  light grey track, ±1.5 mm × MAG wide
-  ·  Travel limit stops    :  thick red "|" bars (fixed to support structure)
-  ·  VV bracket dot        :  blue→amber→red as bracket approaches its stop
-  ·  Radial spokes         :  thin blue lines from VV centre to each support
-                              attachment; rotate with VV, making Δθ visible.
+Rattle polytope
+---------------
+For a given assembly state u_m, the set of all reachable VV centre positions
+(Δx, Δy) — with Δθ optimised freely — is a convex polygon (projection of the
+3D LP feasible set onto the translation plane).  rattle_polytope_2d() computes
+this polygon; plot_vv() draws it (×MAG) around the VV centre dot.
+
+Note on rotation magnitude
+--------------------------
+At the translation LP optimum (max X), Δθ = 5.83 µrad → only 0.17° at ×500.
+Invisible on a circle.  The dedicated rotation GIF shows max Δθ = 187.5 µrad
+→ ±5.37° at ×500, where spoke 0 sweeps visibly.  In that mode ALL nine brackets
+move synchronously (same R·Δθ = 1.5 mm) — the signature of pure rotation.
 
 Usage
 -----
@@ -29,14 +35,16 @@ Usage
 """
 
 from __future__ import annotations
-import argparse, io, base64, os, sys
+import argparse, io, base64, os
 import numpy as np
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
 from matplotlib.animation import FuncAnimation
 from matplotlib.lines import Line2D
 from scipy.optimize import linprog
+from scipy.spatial import ConvexHull
 
 # ── geometry ──────────────────────────────────────────────────────────────────
 MAG     = 500       # displacement magnification for display
@@ -64,8 +72,19 @@ def lp_rattle(u_m: np.ndarray, theta: float) -> tuple[float, np.ndarray]:
     return float(-res.fun), res.x
 
 
+def lp_vec(u_m: np.ndarray, cvec) -> tuple[float, np.ndarray]:
+    """LP with arbitrary 3-vector objective."""
+    Au  = np.vstack([A, -A])
+    bu  = np.concatenate([DELTA_M - u_m, DELTA_M + u_m])
+    res = linprog(-np.asarray(cvec, float), A_ub=Au, b_ub=bu,
+                  bounds=[(None, None)] * 3, method="highs")
+    if not res.success:
+        return 0.0, np.zeros(3)
+    return float(-res.fun), res.x
+
+
 def max_rattle_mm(u_m: np.ndarray, nd: int = 36) -> float:
-    """Maximum rattle range (mm) over all directions."""
+    """Maximum rattle range (mm) over all 2-D translation directions."""
     best = 0.0
     for th in np.linspace(0, np.pi, nd):
         fwd, _ = lp_rattle(u_m, th)
@@ -74,75 +93,121 @@ def max_rattle_mm(u_m: np.ndarray, nd: int = 36) -> float:
     return best * 1000
 
 
+def rattle_polytope_2d(u_m: np.ndarray, nd: int = 360) -> np.ndarray | None:
+    """
+    Convex polygon of all reachable (Δx, Δy) positions from assembly state u_m.
+    Δθ is treated as a free variable (LP uses it optimally for each direction).
+    Returns (nv, 2) array of polygon vertices in metres, ordered CCW.
+    Returns None if the polytope is degenerate (rattle ≈ 0).
+    """
+    pts = np.zeros((nd, 2))
+    Au  = np.vstack([A, -A])
+    bu  = np.concatenate([DELTA_M - u_m, DELTA_M + u_m])
+    for k, th in enumerate(np.linspace(0, 2 * np.pi, nd, endpoint=False)):
+        c = -np.array([np.cos(th), np.sin(th), 0.0])
+        res = linprog(c, A_ub=Au, b_ub=bu, bounds=[(None, None)] * 3, method="highs")
+        pts[k] = res.x[:2]
+    # guard against degenerate (rattle ≈ 0) polygon
+    span = np.ptp(pts, axis=0)
+    if span.max() < 1e-9:
+        return None
+    try:
+        hull   = ConvexHull(pts)
+    except Exception:
+        return None
+    verts  = pts[hull.vertices]
+    # sort CCW
+    cx, cy = verts.mean(0)
+    order  = np.argsort(np.arctan2(verts[:, 1] - cy, verts[:, 0] - cx))
+    return verts[order]
+
+
 # ── core plotter ──────────────────────────────────────────────────────────────
 
-def plot_vv(ax, q_m_rad: np.ndarray, u_m: np.ndarray, title: str = "") -> None:
+def plot_vv(ax, q_m_rad: np.ndarray, u_m: np.ndarray,
+            polytope_m=None,
+            title: str = "") -> None:
     """
     Draw the VV state on *ax*.
 
     Parameters
     ----------
-    q_m_rad : [dx_m, dy_m, dθ_rad]  — true rigid-body displacement
-    u_m     : (9,) assembly offsets in metres
-    title   : optional subplot title
+    q_m_rad    : [dx_m, dy_m, dθ_rad]  — true rigid-body displacement
+    u_m        : (9,) assembly offsets in metres
+    polytope_m : (nv, 2) reachable polygon in metres, drawn at ×MAG around
+                 the VV centre.  Pass rattle_polytope_2d(u_m) to show it.
+    title      : optional subplot title
     """
     dx, dy, dth = q_m_rad
-    # Magnified display quantities
-    DX   = dx  * MAG
-    DY   = dy  * MAG
-    DTH  = dth * MAG   # magnified rotation angle
+    DX   = dx  * MAG      # magnified X
+    DY   = dy  * MAG      # magnified Y
+    DTH  = dth * MAG      # magnified rotation angle (rad)
 
-    phi  = np.linspace(0, 2 * np.pi, 721)
-    GAP_D = DELTA_M * MAG   # half-gap in display metres (0.75 m)
-    BAR_HW = 0.12           # half-height of slot limit bar (m, display)
+    phi   = np.linspace(0, 2 * np.pi, 721)
+    GAP_D = DELTA_M * MAG   # half-gap display (0.75 m)
+    BAR_HW = 0.12
 
-    # -- reference ring (thin grey) --
+    # ── reference ring ──
     ax.plot(R_M * np.cos(phi), R_M * np.sin(phi),
             "-", color="#d8d8d8", lw=0.8, zorder=1)
 
-    # -- displaced VV ring (thick blue) --
+    # ── rattle polytope (fixed in machine frame, centred at origin) ──
+    if polytope_m is not None:
+        px = polytope_m[:, 0] * MAG
+        py = polytope_m[:, 1] * MAG
+        # close the polygon
+        px = np.append(px, px[0])
+        py = np.append(py, py[0])
+        ax.fill(px, py, color="#2b5797", alpha=0.08, zorder=2)
+        ax.plot(px, py, "-", color="#2b5797", lw=1.4, alpha=0.55, zorder=2)
+
+    # ── displaced VV ring ──
     vx = R_M * np.cos(phi + DTH) + DX
     vy = R_M * np.sin(phi + DTH) + DY
     ax.plot(vx, vy, "-", color="#1e4d9b", lw=3.5, zorder=3)
 
-    # -- machine axis cross (stays fixed) --
-    ax.plot(0, 0, "+", color="#222", ms=18, mew=2.2, zorder=8, clip_on=False)
+    # ── machine axis ──
+    ax.plot(0, 0, "+", color="#222", ms=18, mew=2.2, zorder=9, clip_on=False)
 
-    # -- VV centre dot (moves) --
-    ax.plot(DX, DY, "o", color="#1e4d9b", ms=6, zorder=8)
+    # ── VV centre dot — bright red so it reads against the polytope ──
+    ax.plot(DX, DY, "o", color="#cc2200", ms=8, zorder=9,
+            markeredgecolor="white", markeredgewidth=1.2)
 
-    # -- radial spokes (move + rotate with VV) --
-    for φi in ANGLES:
+    # ── radial spokes: spoke 0 (top, φ=90°) orange as orientation marker ──
+    for i, φi in enumerate(ANGLES):
         ex = R_M * np.cos(φi + DTH) + DX
         ey = R_M * np.sin(φi + DTH) + DY
-        ax.plot([DX, ex], [DY, ey], "-", color="#5a8fd4", lw=1.1,
-                alpha=0.5, zorder=2)
+        if i == 0:
+            ax.plot([DX, ex], [DY, ey], "-", color="#e06000",
+                    lw=2.5, alpha=0.9, zorder=4)   # orientation marker
+            ax.plot(ex, ey, "o", color="#e06000", ms=7, zorder=4,
+                    markeredgecolor="white", markeredgewidth=0.8)
+        else:
+            ax.plot([DX, ex], [DY, ey], "-", color="#5a8fd4",
+                    lw=1.2, alpha=0.65, zorder=2)
+            ax.plot(ex, ey, "o", color="#5a8fd4", ms=5, zorder=3,
+                    markeredgecolor="white", markeredgewidth=0.6)
 
-    # -- support slots (fixed in machine frame) --
+    # ── support slots ──
     for i, φi in enumerate(ANGLES):
-        er = np.array([ np.cos(φi),  np.sin(φi)])   # radial unit vector
-        et = np.array([-np.sin(φi),  np.cos(φi)])   # toroidal unit vector
+        er = np.array([ np.cos(φi),  np.sin(φi)])
+        et = np.array([-np.sin(φi),  np.cos(φi)])
+        sc = R_SLOT * er
 
-        sc = R_SLOT * er   # slot centre (fixed)
-
-        # track line
         ax.plot([sc[0] - GAP_D * et[0], sc[0] + GAP_D * et[0]],
                 [sc[1] - GAP_D * et[1], sc[1] + GAP_D * et[1]],
                 "-", color="#aaaaaa", lw=1.6, zorder=3)
 
-        # limit bars ("|")
         for sign in (-1, +1):
             bc = sc + sign * GAP_D * et
             ax.plot([bc[0] - BAR_HW * er[0], bc[0] + BAR_HW * er[0]],
                     [bc[1] - BAR_HW * er[1], bc[1] + BAR_HW * er[1]],
                     "-", color="#cc2200", lw=3.0, zorder=5)
 
-        # pin position (assembly offset + current VV toroidal displacement)
-        delta_i  = A[i] @ q_m_rad
-        pin_off_d = (u_m[i] + delta_i) * MAG   # magnified offset from slot centre
-        pin_pos  = sc + pin_off_d * et
+        delta_i   = A[i] @ q_m_rad
+        pin_off_d = (u_m[i] + delta_i) * MAG
+        pin_pos   = sc + pin_off_d * et
 
-        # colour depends on gap usage fraction
         frac = abs(u_m[i] + delta_i) / DELTA_M
         if   frac > 0.90: pcol, pms = "#cc2200", 10
         elif frac > 0.70: pcol, pms = "#e07000",  8
@@ -152,7 +217,6 @@ def plot_vv(ax, q_m_rad: np.ndarray, u_m: np.ndarray, title: str = "") -> None:
                 color=pcol, ms=pms, zorder=6,
                 markeredgecolor="white", markeredgewidth=0.9)
 
-        # faint radial connector (ring → pin)
         ax_i = R_M * np.cos(φi + DTH) + DX
         ay_i = R_M * np.sin(φi + DTH) + DY
         ax.plot([ax_i, pin_pos[0]], [ay_i, pin_pos[1]],
@@ -167,12 +231,13 @@ def plot_vv(ax, q_m_rad: np.ndarray, u_m: np.ndarray, title: str = "") -> None:
         ax.set_title(title, fontsize=9, color="#333", pad=5)
 
 
-# ── GIF maker ─────────────────────────────────────────────────────────────────
+# ── GIF makers ────────────────────────────────────────────────────────────────
 
 def make_gif(u_m: np.ndarray, outpath: str, n_frames: int = 40,
              fps: int = 10, dpi: int = 80) -> tuple[str, float]:
     """
-    Animate VV rocking along its principal rattle axis.
+    Animate VV rocking along its principal translation rattle axis.
+    Draws the rattle polytope so the viewer sees where the centre travels.
     Returns (outpath, rattle_mm).
     """
     best_fwd_m, best_dq_fwd, best_th = 0.0, np.zeros(3), 0.0
@@ -184,6 +249,8 @@ def make_gif(u_m: np.ndarray, outpath: str, n_frames: int = 40,
     bwd_m, best_dq_bwd = lp_rattle(u_m, best_th + np.pi)
     rattle_mm = (best_fwd_m + bwd_m) * 1000
 
+    polytope = rattle_polytope_2d(u_m, nd=180)
+
     t = np.concatenate([np.linspace(0, 1, n_frames // 2),
                         np.linspace(1, 0, n_frames // 2)])
     q_frames = [best_dq_bwd + s * (best_dq_fwd - best_dq_bwd) for s in t]
@@ -193,16 +260,113 @@ def make_gif(u_m: np.ndarray, outpath: str, n_frames: int = 40,
 
     def draw(k):
         ax.clear()
-        plot_vv(ax, q_frames[k], u_m)
+        plot_vv(ax, q_frames[k], u_m, polytope_m=polytope)
         ax.set_title(
-            f"Rattle range {rattle_mm:.2f} mm  ·  ×{MAG} magnification",
-            fontsize=8.5, color="#444", pad=3
+            f"Translation rattle {rattle_mm:.2f} mm  ·  ×{MAG}  ·  "
+            f"shaded polygon = all reachable positions",
+            fontsize=8.0, color="#444", pad=3,
         )
 
     anim = FuncAnimation(fig, draw, frames=n_frames, interval=100)
     anim.save(outpath, writer="pillow", fps=fps, dpi=dpi)
     plt.close(fig)
     return outpath, rattle_mm
+
+
+def make_rotation_gif(u_m: np.ndarray, outpath: str, n_frames: int = 40,
+                      fps: int = 10, dpi: int = 80) -> tuple[str, float]:
+    """
+    Animate VV rotating through its maximum rotation range (Δθ DOF).
+    At ×500 the max rotation (187.5 µrad) becomes ±5.37° — clearly visible
+    as spoke 0 sweeps around.  All 9 brackets move synchronously (pure rotation
+    signature).
+    Returns (outpath, rot_range_mrad).
+    """
+    fwd_m, dq_fwd = lp_vec(u_m, [0, 0, 1])
+    bwd_m, dq_bwd = lp_vec(u_m, [0, 0, -1])
+    rot_range_mrad = (fwd_m + bwd_m) * 1000  # µrad → mrad
+
+    polytope = rattle_polytope_2d(u_m, nd=180)
+
+    t = np.concatenate([np.linspace(0, 1, n_frames // 2),
+                        np.linspace(1, 0, n_frames // 2)])
+    q_frames = [dq_bwd + s * (dq_fwd - dq_bwd) for s in t]
+
+    fig, ax = plt.subplots(figsize=(6.5, 6.5), facecolor="white")
+    fig.subplots_adjust(left=0.01, right=0.99, top=0.93, bottom=0.01)
+
+    def draw(k):
+        ax.clear()
+        plot_vv(ax, q_frames[k], u_m, polytope_m=polytope)
+        dth_disp_deg = np.degrees(q_frames[k][2] * MAG)
+        ax.set_title(
+            f"Rotation mode  Δθ = {q_frames[k][2]*1e6:+.1f} µrad  "
+            f"(×{MAG} = {dth_disp_deg:+.2f}°)  ·  range {rot_range_mrad:.3f} mrad",
+            fontsize=8.0, color="#444", pad=3,
+        )
+
+    anim = FuncAnimation(fig, draw, frames=n_frames, interval=100)
+    anim.save(outpath, writer="pillow", fps=fps, dpi=dpi)
+    plt.close(fig)
+    return outpath, rot_range_mrad
+
+
+# ── key-frame strip (for PDF) ──────────────────────────────────────────────────
+
+def make_keyframe_strip(u_m: np.ndarray, outpath: str,
+                        mode: str = "translation",
+                        n_frames: int = 5, dpi: int = 100) -> str:
+    """
+    Single-row strip of n_frames key frames along the principal rattle or
+    rotation axis.  Suitable for embedding in a printed PDF.
+    Returns base64-encoded PNG string.
+    """
+    if mode == "rotation":
+        fwd_m, dq_fwd = lp_vec(u_m, [0, 0,  1])
+        bwd_m, dq_bwd = lp_vec(u_m, [0, 0, -1])
+        label = "Rotation"
+        unit  = f"{(fwd_m+bwd_m)*1e6:.1f} µrad range"
+    else:
+        best_fwd_m, dq_fwd, best_th = 0.0, np.zeros(3), 0.0
+        for th in np.linspace(0, np.pi, 72):
+            v, dq = lp_rattle(u_m, th)
+            if v > best_fwd_m:
+                best_fwd_m, dq_fwd, best_th = v, dq, th
+        bwd_m, dq_bwd = lp_rattle(u_m, best_th + np.pi)
+        label = "Translation"
+        unit  = f"{(best_fwd_m+bwd_m)*1e3:.2f} mm range"
+
+    polytope = rattle_polytope_2d(u_m, nd=180)
+    t_vals = np.linspace(0, 1, n_frames)
+
+    fig, axes = plt.subplots(1, n_frames,
+                             figsize=(5 * n_frames, 5.2),
+                             facecolor="white")
+    fig.subplots_adjust(wspace=0.02, left=0.005, right=0.995,
+                        top=0.88, bottom=0.005)
+
+    for k, (ax, t) in enumerate(zip(axes, t_vals)):
+        q = dq_bwd + t * (dq_fwd - dq_bwd)
+        plot_vv(ax, q, u_m, polytope_m=polytope)
+        pos_label = ["← max", "¾←", "centre", "¾→", "max →"][k] if n_frames == 5 \
+                    else f"t={t:.2f}"
+        ax.set_title(pos_label, fontsize=8, color="#555", pad=3)
+
+    fig.suptitle(
+        f"{label} rattle key frames  ({unit})  ·  ×{MAG} magnification  ·  "
+        f"orange spoke = support 0 (orientation marker)",
+        fontsize=8.5, color="#333", y=0.97,
+    )
+
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", dpi=dpi, bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+    b64 = base64.b64encode(buf.getvalue()).decode()
+
+    if outpath:
+        with open(outpath, "wb") as fh:
+            fh.write(base64.b64decode(b64))
+    return b64
 
 
 # ── static figures ─────────────────────────────────────────────────────────────
@@ -212,35 +376,43 @@ def figure_three_panel(u_worst: np.ndarray) -> str:
     fig, axes = plt.subplots(1, 3, figsize=(15, 6), facecolor="white")
     fig.subplots_adjust(wspace=0.05, left=0.01, right=0.99, top=0.91, bottom=0.07)
 
-    # Panel 1 — nominal assembly (u=0), VV at max +X rattle
-    _, dq_nom = lp_rattle(np.zeros(9), 0.0)
-    plot_vv(axes[0], dq_nom, np.zeros(9))
-    axes[0].set_title("Nominal assembly (u = 0)\nShown at max +X rattle position",
-                       fontsize=9, color="#333")
+    # Panel 1 — nominal assembly (u=0), VV at max +X rattle, with polytope
+    u_nom = np.zeros(9)
+    poly_nom = rattle_polytope_2d(u_nom, nd=120)
+    _, dq_nom = lp_rattle(u_nom, 0.0)
+    plot_vv(axes[0], dq_nom, u_nom, polytope_m=poly_nom)
+    nom_rattle = max_rattle_mm(u_nom)
+    axes[0].set_title(f"Nominal assembly (u = 0)\nRattle = {nom_rattle:.2f} mm  ·  max +X shown",
+                      fontsize=9, color="#333")
 
-    # Panel 2 — worst MC sample
+    # Panel 2 — worst MC sample, with polytope
+    poly_wc = rattle_polytope_2d(u_worst, nd=120)
     _, dq_wc = lp_rattle(u_worst, 0.0)
     rattle_wc = max_rattle_mm(u_worst)
-    plot_vv(axes[1], dq_wc, u_worst)
+    plot_vv(axes[1], dq_wc, u_worst, polytope_m=poly_wc)
     axes[1].set_title(f"Worst MC sample (rattle = {rattle_wc:.2f} mm)\nShown at max rattle position",
                       fontsize=9, color="#333")
 
     # Panel 3 — alternating gaps → fully locked
     u_alt = np.array([DELTA_M if i % 2 == 0 else -DELTA_M for i in range(N)])
-    plot_vv(axes[2], np.zeros(3), u_alt)
+    poly_alt = rattle_polytope_2d(u_alt, nd=120)
+    plot_vv(axes[2], np.zeros(3), u_alt, polytope_m=poly_alt)
     axes[2].set_title("Alternating ±1.5 mm gaps\nRattle ≈ 0 — fully locked",
                       fontsize=9, color="#333")
 
     legend_els = [
-        Line2D([0], [0], color="#d8d8d8", lw=1.5, label="Nominal VV ring"),
+        Line2D([0], [0], color="#d8d8d8", lw=1.5, label="Reference ring"),
         Line2D([0], [0], color="#1e4d9b", lw=3.0, label=f"Displaced VV ring (×{MAG})"),
+        Line2D([0], [0], color="#e06000", lw=2.5, label="Spoke 0 (orientation)"),
         Line2D([0], [0], color="#cc2200", lw=2.5, label="Slot limits (±1.5 mm)"),
+        mpatches.Patch(facecolor="#2b5797", alpha=0.15, edgecolor="#2b5797",
+                       label="Rattle polytope"),
         Line2D([0], [0], marker="o", color="#1a6ea8", ms=7, ls="none", label="Pin — slack"),
         Line2D([0], [0], marker="o", color="#e07000", ms=7, ls="none", label="Pin — near limit"),
         Line2D([0], [0], marker="o", color="#cc2200", ms=7, ls="none", label="Pin — at limit"),
     ]
-    fig.legend(handles=legend_els, loc="lower center", ncol=6,
-               fontsize=8, frameon=True, fancybox=False,
+    fig.legend(handles=legend_els, loc="lower center", ncol=8,
+               fontsize=7.5, frameon=True, fancybox=False,
                edgecolor="#ccc", bbox_to_anchor=(0.5, 0.0))
 
     buf = io.BytesIO()
@@ -371,10 +543,12 @@ def main():
     args = parser.parse_args()
 
     os.makedirs(args.outdir, exist_ok=True)
-    anim_dir = os.path.join(args.outdir, "animations")
-    os.makedirs(anim_dir, exist_ok=True)
+    anim_dir  = os.path.join(args.outdir, "animations")
     plots_dir = os.path.join(args.outdir, "plots")
-    os.makedirs(plots_dir, exist_ok=True)
+    strips_dir = os.path.join(args.outdir, "strips")
+    os.makedirs(anim_dir,   exist_ok=True)
+    os.makedirs(plots_dir,  exist_ok=True)
+    os.makedirs(strips_dir, exist_ok=True)
 
     # Load MC data
     try:
@@ -392,7 +566,7 @@ def main():
         u_worst = u_mc[rattles_mm.argmax()]
 
     # Static figures
-    print("Generating 3-panel state figure …")
+    print("Generating 3-panel state figure (with polytopes) …")
     b64_3panel = figure_three_panel(u_worst)
     png_path = os.path.join(plots_dir, "vv_states.png")
     with open(png_path, "wb") as fh:
@@ -413,27 +587,48 @@ def main():
         fh.write(base64.b64decode(b64_partial))
     print(f"  → {png_partial}")
 
-    gif_nom_path = gif_wc_path = None
+    # Key-frame strips for PDF
+    print("Generating key-frame strips …")
+    strip_nom_trans = os.path.join(strips_dir, "strip_nominal_translation.png")
+    make_keyframe_strip(np.zeros(N), strip_nom_trans, mode="translation")
+    print(f"  → {strip_nom_trans}")
+
+    strip_nom_rot = os.path.join(strips_dir, "strip_nominal_rotation.png")
+    make_keyframe_strip(np.zeros(N), strip_nom_rot, mode="rotation")
+    print(f"  → {strip_nom_rot}")
+
+    strip_wc_trans = os.path.join(strips_dir, "strip_worst_translation.png")
+    make_keyframe_strip(u_worst, strip_wc_trans, mode="translation")
+    print(f"  → {strip_wc_trans}")
+
+    gif_nom_path = gif_wc_path = gif_rot_path = None
     if not args.no_gif:
-        print("Generating nominal GIF …")
+        print("Generating nominal translation GIF (with polytope) …")
         gif_nom_path, nom_rattle = make_gif(
             np.zeros(N), os.path.join(anim_dir, "rattle_nominal.gif"))
         print(f"  → {gif_nom_path}  ({nom_rattle:.2f} mm)")
-        print("Generating worst-case GIF …")
+
+        print("Generating worst-case translation GIF (with polytope) …")
         gif_wc_path, wc_rattle = make_gif(
             u_worst, os.path.join(anim_dir, "rattle_worst_case.gif"))
         print(f"  → {gif_wc_path}  ({wc_rattle:.2f} mm)")
+
+        print("Generating rotation GIF (max Δθ mode) …")
+        gif_rot_path, rot_range = make_rotation_gif(
+            np.zeros(N), os.path.join(anim_dir, "rattle_rotation.gif"))
+        print(f"  → {gif_rot_path}  ({rot_range:.3f} mrad range)")
 
     print("\nAll outputs written.")
     return {
         "b64_3panel": b64_3panel,
         "b64_mc": b64_mc,
         "b64_partial": b64_partial,
-        "gif_nom": gif_nom_path,
-        "gif_wc": gif_wc_path,
+        "gif_nom":  gif_nom_path,
+        "gif_wc":   gif_wc_path,
+        "gif_rot":  gif_rot_path,
         "rattles_mm": rattles_mm,
-        "u_worst": u_worst,
-        "u_mc": u_mc,
+        "u_worst":  u_worst,
+        "u_mc":     u_mc,
     }
 
 
