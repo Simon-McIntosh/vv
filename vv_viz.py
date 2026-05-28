@@ -47,7 +47,7 @@ from scipy.optimize import linprog
 from scipy.spatial import ConvexHull
 
 # ── geometry ──────────────────────────────────────────────────────────────────
-MAG     = 750       # displacement magnification for display (polytope-diagnostic)
+MAG     = 500       # displacement magnification for display (polytope-diagnostic)
 N       = 9         # number of supports
 R_M     = 8.0       # VV radius (m)
 R_SLOT  = 8.5       # slot display radius — slightly outside VV (m)
@@ -281,11 +281,7 @@ def make_gif(u_m: np.ndarray, outpath: str, n_frames: int = 40,
     def draw(k):
         ax.clear()
         plot_vv(ax, q_frames[k], u_m, polytope_m=polytope)
-        ax.set_title(
-            f"Forced excursion through the gravitational centre  ·  envelope diameter "
-            f"{rattle_mm:.2f} mm  ·  ×{MAG}  ·  shaded polygon = all reachable positions",
-            fontsize=7.5, color="#444", pad=3,
-        )
+        # title intentionally empty — context is given in the figure caption
 
     anim = FuncAnimation(fig, draw, frames=n_frames, interval=100)
     anim.save(outpath, writer="pillow", fps=fps, dpi=dpi)
@@ -379,11 +375,7 @@ def make_keyframe_strip(u_m: np.ndarray, outpath: str,
                     else f"t={t:.2f}"
         ax.set_title(pos_label, fontsize=8, color="#555", pad=3)
 
-    fig.suptitle(
-        f"{label} rattle key frames  ({unit})  ·  ×{MAG} magnification  ·  "
-        f"orange spoke = support 0 (orientation marker)",
-        fontsize=8.5, color="#333", y=0.97,
-    )
+    # Suptitle intentionally omitted — figure caption carries the context.
 
     buf = io.BytesIO()
     fig.savefig(buf, format="png", dpi=dpi, bbox_inches="tight", facecolor="white")
@@ -398,35 +390,55 @@ def make_keyframe_strip(u_m: np.ndarray, outpath: str,
 
 # ── static figures ─────────────────────────────────────────────────────────────
 
+def _max_departure_state(u_m: np.ndarray, nd: int = 144) -> tuple[float, np.ndarray]:
+    """Search nd directions for the LP-extreme that maximises ||q[:2]||.
+    Returns (departure_mm, q*)."""
+    best = 0.0
+    best_q = np.zeros(3)
+    for th in np.linspace(0, 2 * np.pi, nd, endpoint=False):
+        _, q = lp_rattle(u_m, th)
+        d = float(np.hypot(q[0], q[1]))
+        if d > best:
+            best, best_q = d, q
+    return best * 1000.0, best_q
+
+
 def figure_three_panel(u_worst: np.ndarray) -> str:
     """Two-panel state figure: nominal assembly | worst MC sample.
 
-    The VV is drawn at the gravitational centre (q = 0) in both panels; the
-    polytope around the centre is the kinematic envelope of possible forced
-    displacements. Returns base64 PNG."""
+    In each panel the VV ring is drawn at its max-departure position; a red
+    arrow from the machine axis (cross) to the displaced VV centre shows the
+    direction and magnitude of that maximum displacement; the shaded polygon
+    around the machine axis is the displacement polytope (the kinematic
+    envelope of possible lateral positions). Returns base64 PNG."""
     fig, axes = plt.subplots(1, 2, figsize=(12, 6), facecolor="white")
-    fig.subplots_adjust(wspace=0.05, left=0.01, right=0.99, top=0.91, bottom=0.09)
+    fig.subplots_adjust(wspace=0.05, left=0.01, right=0.99, top=0.91, bottom=0.10)
 
-    # Panel 1 — nominal assembly (u = 0), VV at the centre, polytope around it
-    u_nom = np.zeros(N)
-    poly_nom = rattle_polytope_2d(u_nom, nd=120)
-    plot_vv(axes[0], np.zeros(3), u_nom, polytope_m=poly_nom)
-    nom_dep = max_departure_mm(u_nom)
-    axes[0].set_title(f"Nominal assembly (u = 0)\n"
-                      f"Max forced departure = {nom_dep:.2f} mm",
-                      fontsize=9.5, color="#333")
-
-    # Panel 2 — worst MC sample, VV ALSO drawn at the centre (gravitational rest)
-    poly_wc = rattle_polytope_2d(u_worst, nd=120)
-    dep_wc = max_departure_mm(u_worst)
-    plot_vv(axes[1], np.zeros(3), u_worst, polytope_m=poly_wc)
-    axes[1].set_title(f"Worst MC sample (offset assembly)\n"
-                      f"Max forced departure = {dep_wc:.2f} mm",
-                      fontsize=9.5, color="#333")
+    for ax, u, label in [(axes[0], np.zeros(N), "Nominal assembly (u = 0)"),
+                         (axes[1], u_worst,    "Worst MC sample (offset assembly)")]:
+        poly = rattle_polytope_2d(u, nd=120)
+        dep_mm, q_star = _max_departure_state(u, nd=144)
+        plot_vv(ax, q_star, u, polytope_m=poly)
+        # arrow from machine axis (origin) to displaced VV centre — make it bold
+        DX, DY = q_star[0] * MAG, q_star[1] * MAG
+        ax.annotate(
+            "", xy=(DX, DY), xytext=(0, 0),
+            arrowprops=dict(arrowstyle="-|>,head_length=0.6,head_width=0.4",
+                            color="#cc2200", lw=3.2, shrinkA=0, shrinkB=4),
+            zorder=12,
+        )
+        # mm-scale label next to the arrow
+        ax.text(DX * 0.55, DY * 0.55 + 0.25, f"{dep_mm:.2f} mm",
+                color="#cc2200", fontsize=9, weight="bold", ha="left", va="bottom",
+                bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="#cc2200", alpha=0.9, lw=0.8),
+                zorder=13)
+        ax.set_title(f"{label}\nMax displacement from centre = {dep_mm:.2f} mm",
+                     fontsize=9.5, color="#333")
 
     legend_els = [
         Line2D([0], [0], color="#d8d8d8", lw=1.5, label="Reference ring"),
-        Line2D([0], [0], color="#1e4d9b", lw=3.0, label=f"VV ring at centre (×{MAG})"),
+        Line2D([0], [0], color="#1e4d9b", lw=3.0, label=f"VV ring at max displacement (×{MAG})"),
+        Line2D([0], [0], color="#cc2200", lw=2.2, label="Max-displacement vector (origin → VV centre)"),
         Line2D([0], [0], color="#e06000", lw=2.5, label="Spoke 0 (orientation)"),
         Line2D([0], [0], color="#cc2200", lw=2.5, label="Slot limits (±1.5 mm)"),
         mpatches.Patch(facecolor="#2b5797", alpha=0.15, edgecolor="#2b5797",
@@ -435,7 +447,7 @@ def figure_three_panel(u_worst: np.ndarray) -> str:
         Line2D([0], [0], marker="o", color="#e07000", ms=7, ls="none", label="Pin — near limit"),
         Line2D([0], [0], marker="o", color="#cc2200", ms=7, ls="none", label="Pin — at limit"),
     ]
-    fig.legend(handles=legend_els, loc="lower center", ncol=8,
+    fig.legend(handles=legend_els, loc="lower center", ncol=5,
                fontsize=7.5, frameon=True, fancybox=False,
                edgecolor="#ccc", bbox_to_anchor=(0.5, 0.0))
 
@@ -534,18 +546,25 @@ def figure_partial_measurement(rattles_all: np.ndarray, u_ref=None) -> str:
     nom  = max_departure_mm(np.zeros(N), nd=72)
     rmax = float(r.max())
     ax_d.hist(r, bins=50, color="#2b5797", alpha=0.75, edgecolor="white", lw=0.4)
-    for x, c, lab in [(nom,  "#888888", f"nominal (u=0) {nom:.2f}"),
-                      (mode, "#228822", f"mode {mode:.2f}"),
-                      (med,  "#1a6ea8", f"median {med:.2f}"),
-                      (q95,  "#cc8800", f"P95 {q95:.2f}"),
-                      (rmax, "#cc2200", f"max {rmax:.2f}")]:
-        ax_d.axvline(x, color=c, lw=2, ls="--", label=lab)
+    h_top = ax_d.get_ylim()[1]
+    # Direct labels at each percentile / reference line (no legend)
+    for x, c, name, yf in [(mode, "#228822", "Mode",    0.93),
+                            (med,  "#1a6ea8", "Median",  0.78),
+                            (nom,  "#666666", "Nominal", 0.63)]:
+        ax_d.axvline(x, color=c, lw=1.5, ls="--")
+        ax_d.text(x, h_top * yf, f"{name}\n{x:.2f} mm",
+                  ha="center", va="top", fontsize=8, color=c, weight="bold",
+                  bbox=dict(boxstyle="round,pad=0.18", fc="white", ec=c, alpha=0.92, lw=0.8))
+    for x, c, name, yf in [(q95,  "#cc8800", "P95",  0.93),
+                            (rmax, "#cc2200", "Max",  0.78)]:
+        ax_d.axvline(x, color=c, lw=1.8, ls="--")
+        ax_d.text(x, h_top * yf, f"{name}\n{x:.2f} mm",
+                  ha="center", va="top", fontsize=8, color=c, weight="bold",
+                  bbox=dict(boxstyle="round,pad=0.18", fc="white", ec=c, alpha=0.92, lw=0.8))
     ax_d.set_xlabel("Max forced departure from gravitational centre (mm)", fontsize=10)
     ax_d.set_ylabel(f"Count  (n = {len(r):,})", fontsize=10)
-    ax_d.set_title("Measuring all 9 gaps reveals ONE value from this\n"
-                   "distribution (~mode for a typical assembly)",
-                   fontsize=9.5, color="#1a3a6e")
-    ax_d.legend(fontsize=8.0, frameon=False, loc="upper right")
+    ax_d.set_title("Displacement distribution (measuring all 9 reveals one value)",
+                   fontsize=10, color="#1a3a6e")
     ax_d.spines[["top", "right"]].set_visible(False)
 
     # ── Right: conditional P95 vs number of gaps measured ──

@@ -235,14 +235,14 @@ def main():
            "polygon around the centre is the displacement polytope — the kinematic envelope of "
            "possible lateral displacements under applied force. Left: nominal assembly "
            "(envelope half-width 1.55 mm). Right: worst observed MC sample — the offsets shift "
-           "the polytope so the far corner lies up to 2.98 mm from the centre. ×750 magnification.")
+           "the polytope so the far corner lies up to 2.98 mm from the centre. ×500 magnification.")
 
     heading2(doc, "4 — Forced-excursion envelope")
     body(doc, [
         ("The animations sweep the VV centre through the polytope along its principal axis — "
          "the kinematic envelope of lateral motion about the centred rest position. With no "
          "applied force the vessel sits at the centre; sufficient applied force drives it "
-         "through the envelope. ×750 magnification.", False),
+         "through the envelope. ×500 magnification.", False),
     ])
     figure(doc, os.path.join(DOCS, "animations", "rattle_worst_case.gif"),
            f"Worst observed MC sample — max forced departure ≈ {rmax:.2f} mm. [GIF first frame]",
@@ -364,7 +364,7 @@ def main():
     fr = foot.add_run("Author: Simon McIntosh. Monte Carlo data generated reproducibly by "
                       "vv_mc_generator.py (scipy HiGHS LP, max-lateral-displacement-from-centre "
                       "metric, N = 5000, fixed seed 20260527 → committed data/). Figures and "
-                      "animations by vv_viz.py; displacements magnified ×750. Centring "
+                      "animations by vv_viz.py; displacements magnified ×500. Centring "
                       "parameters M ≈ 8000 t, 15° inclined dual hinge → L_eff ≈ 26 m → "
                       "K ≈ 3 kN/mm, T_n ≈ 10 s, F_stop ≈ 4.5 kN. Every number regenerates from "
                       "the repository. Source: Simon-McIntosh/vv.")

@@ -53,9 +53,9 @@ from the gravitational centre. Nominal (centred-assembly) kinematic envelope =
 <strong>2.27 mm</strong>, P99 = 2.53 mm, max = 2.98 mm; quiescent contribution = 0.</li>
 <li><strong>Start-up (0 → 3 MA in 10 s) is favourable.</strong> Passive vessel currents
 respond to the n ≤ 4 toroidal-field asymmetry from TF vault closure; the resulting lateral
-force pulls the vessel <em>toward</em> the TF magnetic centre. Any vessel movement during the
-ramp therefore <strong>closes</strong> the peak-to-peak first-wall vs filtered-field mismatch,
-not opens it.</li>
+force pulls the vessel <em>toward</em> the TF magnetic centre. Any vessel motion during the
+ramp therefore <strong>reduces</strong> the peak-to-peak misalignment between the n ≤ 4
+first-wall and filtered-field profiles.</li>
 <li><strong>Disruption is the bounding VVGS lateral load case.</strong> An MN-scale lateral
 impulse over ms gives the vessel ~12 mm/s closing velocity; the soft centring barely
 decelerates it; it impacts the dowel stops with ~1 MN peak lateral force on the VVGS — much
@@ -76,13 +76,13 @@ toroidally beneath the lower ports, on a ring of radius R<sub>s</sub> ≈ 8 m. E
 the machine axis. Radial motion of the vessel is permitted by rotation of the dowels (this
 accommodates the thermal expansion between assembly and operation/baking); toroidal and
 vertical motion are restrained by the dowels' rigidity. The toroidal restraint is a
-<strong>±1.5 mm (3 mm total) dowel slot</strong>, confirmed against the GS design.</p>
+<strong>±1.5 mm (3 mm total) dowel slot</strong>.</p>
 
 <table>
 <tr><th>Parameter</th><th>Value</th><th>Note</th></tr>
 <tr><td>Number of supports</td><td class="num">9</td><td>Equally spaced toroidally</td></tr>
 <tr><td>Support ring radius R<sub>s</sub></td><td class="num">8 m</td><td></td></tr>
-<tr><td>Toroidal slot per support</td><td class="num">±1.5 mm (3 mm total)</td><td>Confirmed against GS design</td></tr>
+<tr><td>Toroidal slot per support</td><td class="num">±1.5 mm (3 mm total)</td><td>Assembly tolerance (see below)</td></tr>
 <tr><td>Hinge inclination from vertical</td><td class="num">15°</td><td>Inward (centring)</td></tr>
 <tr><td>Supported mass M</td><td class="num">≈ 8000 t</td><td>VV + in-vessel components</td></tr>
 </table>
@@ -121,57 +121,87 @@ gravitational centre, regardless of the assembly offsets. The pins simply occupy
 respective u<sub>i</sub> positions in the slots; the vessel itself is on-axis.</div>
 
 <!-- ═══════════════════════════════════════════════════════════ §2 -->
-<h2 id="s2">§2 — Constraint Model</h2>
+<h2 id="s2">§2 — Constraint Model, Polytope &amp; Linear Programming</h2>
 
-<p>For a rigid-body lateral displacement <strong>q = [Δx, Δy, Δθ]</strong>, the toroidal slide
-at support <em>i</em> is</p>
+<p>We model the vacuum vessel as a rigid body with three in-plane degrees of freedom — two
+horizontal translations Δx, Δy and a rotation Δθ about the vertical axis (collected as
+<strong>q = [Δx, Δy, Δθ]</strong>). Each of the nine supports imposes a single linear
+inequality constraint: the toroidal slide of the vessel relative to its dowel must stay
+within the ±1.5 mm slot. For support <em>i</em> at toroidal angle
+φ<sub>i</sub> = π/2 − 2πi/9 on the support ring at radius R = 8 m, the slide is</p>
 <pre>δᵢ = −sin(φᵢ)·Δx + cos(φᵢ)·Δy + R·Δθ  ≡  A[i, :] · q ,
-   |uᵢ + δᵢ| ≤ 1.5 mm    for all i,</pre>
-<p>with φ<sub>i</sub> = π/2 − 2πi/9 and R = 8 m. The 9×3 constraint matrix satisfies
-<strong>AᵀA = diag(4.5, 4.5, 576)</strong>: the three rigid-body DOFs are mutually
-uncorrelated. The set of reachable VV-centre positions in (Δx, Δy) — with Δθ optimised — is
-the <strong>displacement polytope</strong> for a given assembly state u. The metric of this
-report is the maximum lateral displacement of the VV centre from the gravitational centre
-q = 0, computed as the maximum norm over the polytope by 72-direction LP sweep.</p>
+   |uᵢ + δᵢ| ≤ 1.5 mm    for all i = 1 … 9,</pre>
+<p>so the displacement is bounded by <strong>18 linear inequalities</strong> (one upper and
+one lower bound per support). The 9×3 constraint matrix has
+<strong>AᵀA = diag(4.5, 4.5, 576)</strong> — exactly diagonal, so the three rigid-body DOFs
+are mutually uncorrelated.</p>
+
+<div class="callout info">
+<strong>Polytope.</strong> The set of vessel positions that simultaneously satisfy all 18
+inequalities is a convex region of (Δx, Δy, Δθ) space bounded by flat faces — geometrically a
+<em>polytope</em> (the three-dimensional generalisation of a polygon). Projected onto the
+horizontal plane (Δx, Δy), with Δθ optimised at each direction, it is a closed convex polygon
+of feasible lateral VV-centre positions — the <strong>displacement polytope</strong>. Its
+shape depends on the assembly offsets u and its diameter is set by the ±1.5 mm slot.
+
+<p style="margin:.6em 0 0 0"><strong>Linear program (LP).</strong> A linear program optimises
+a linear objective subject to linear inequality constraints — the canonical method for
+problems of exactly this kind. We solve, in each direction θ, the LP that maximises the
+projection of q on the unit vector (cos θ, sin θ, 0) subject to the 18 inequalities above; the
+optimum lies at the polytope vertex furthest along that direction. Sweeping θ traces the
+polytope boundary, and the maximum of ||q[:2]|| over the sweep is our metric: the
+<strong>maximum lateral displacement of the VV centre from the gravitational centre</strong>
+that any applied force can drive the vessel to. We use the HiGHS solver
+(<code>scipy.optimize.linprog</code>); each LP solves in milliseconds.</p>
+</div>
 
 <!-- ═══════════════════════════════════════════════════════════ §3 -->
 <h2 id="s3">§3 — State Diagrams</h2>
 
-<p>The vessel is drawn at the gravitational centre in both panels (its rest position). The
-shaded polygon around the centre is the displacement polytope — the set of lateral positions
-the centre can reach under an applied force. Displacements are magnified ×750.</p>
+<p>Each panel shows the VV ring at its <em>maximum-displacement</em> position; the red arrow
+from the machine axis (black cross) to the displaced VV centre is the maximum-displacement
+vector — its direction and length show where and how far the vessel can be driven by an
+applied lateral force. The blue shaded polygon around the machine axis is the displacement
+polytope (the kinematic envelope of all reachable VV-centre positions). Displacements are
+magnified ×500.</p>
 
 <figure>
   <img src="plots/vv_states.png" alt="Two-panel VV state diagram">
-  <figcaption>Left — nominal assembly (u = 0): the polytope is symmetric about the centre,
-  envelope half-width 1.55 mm. Right — worst observed MC sample: the assembly offsets shift
-  the polytope so the far corner lies further from the centre, giving a larger maximum forced
-  departure (~2.98 mm). In both cases the vessel rests at the gravitational centre; the
-  polytope shows the kinematic envelope of possible displacement under applied lateral force.
-  At each support the toroidal slot (grey, with red ±1.5 mm end-stops) is held at a constant
-  radial distance from the wall by the inclined linkage (radial motion is free); the coloured
-  pin in the slot indicates how much of the ±1.5 mm toroidal travel is taken up (blue = slack,
-  orange = near the limit, red = at the stop).</figcaption>
+  <figcaption>Left — <strong>nominal assembly</strong> (u = 0): the polytope is symmetric
+  about the machine axis and the maximum displacement is 1.55 mm in any direction. Right —
+  <strong>worst observed MC sample</strong>: the assembly offsets shift the polytope
+  off-axis, so the maximum-displacement vector reaches further from the machine axis
+  (2.98 mm). At each support the toroidal slot (grey, with red ±1.5 mm end-stops) is held at
+  a constant radial distance from the vessel wall by the inclined linkage — radial motion is
+  free; the coloured pin in the slot indicates how much of the ±1.5 mm toroidal travel is
+  taken up (blue = slack, orange = near the limit, red = at the stop).</figcaption>
 </figure>
 
 <!-- ═══════════════════════════════════════════════════════════ §4 -->
 <h2 id="s4">§4 — Forced-Excursion Envelope</h2>
 
 <p>The animations sweep the VV centre through the polytope along its principal axis — the
-kinematic envelope of possible lateral motion about the centred rest position. The vessel
-sits at the centre under no force; sufficient applied force drives it through the envelope.</p>
+kinematic envelope of possible lateral motion about the centred rest position. With no
+applied force the vessel sits at the machine axis; sufficient applied force drives it
+through the envelope. ×500 magnification; the grey toroidal slot at each support tracks the
+vessel wall (radial motion is free), and the coloured pin shows the toroidal-constraint
+usage (blue = slack, orange = near limit, red = at stop). Spoke 0 (orange) is the
+orientation marker.</p>
 
-<figure>
-  <img src="animations/rattle_worst_case.gif" alt="Worst-case forced excursion">
-  <figcaption>Worst observed MC sample — maximum forced departure from the gravitational
-  centre ≈ 2.98 mm. ×750 magnification.</figcaption>
-</figure>
-
-<figure>
-  <img src="animations/rattle_mode.gif" alt="Near-mode (typical) forced excursion">
-  <figcaption>Typical as-built assembly (drawn near the distribution mode) — maximum forced
-  departure ≈ 1.49 mm, the most likely value. ×750 magnification.</figcaption>
-</figure>
+<div style="display:flex;gap:1em;flex-wrap:wrap;justify-content:center;align-items:flex-start">
+  <figure style="flex:1 1 360px;max-width:520px;margin:0">
+    <img src="animations/rattle_worst_case.gif" alt="Worst-case forced excursion">
+    <figcaption><strong>Worst observed MC sample.</strong> Offset assembly; maximum forced
+    departure from the machine axis ≈ 2.98 mm — the kinematic ceiling for the worst random
+    assembly drawn from the iid Uniform(±1.5 mm) prior.</figcaption>
+  </figure>
+  <figure style="flex:1 1 360px;max-width:520px;margin:0">
+    <img src="animations/rattle_mode.gif" alt="Near-mode (typical) forced excursion">
+    <figcaption><strong>Typical as-built assembly</strong> (drawn near the distribution
+    mode). Maximum forced departure ≈ 1.49 mm — the most likely value an as-built machine
+    will actually exhibit.</figcaption>
+  </figure>
+</div>
 
 <!-- ═══════════════════════════════════════════════════════════ §5 -->
 <h2 id="s5">§5 — Monte Carlo Distribution</h2>
@@ -246,10 +276,11 @@ produce a lateral n = 1 force on the vessel.</p>
 <strong>Important: the start-up displacement direction is favourable.</strong> The lateral
 force on the induced vessel current is such that the vessel is pulled <em>toward</em> the
 n = 1 magnetic axis of the (offset) toroidal field — passive vessel currents act to
-<strong>self-align</strong> the wall with the field profile. Any vessel motion during the
-ramp therefore <strong>closes</strong> the peak-to-peak misalignment between the filtered
-(n ≤ 4) first-wall and toroidal-field profiles, rather than opening it. The start-up ramp is
-not a budget-eroding event for the n = 1 first-wall criterion — it is the opposite.</div>
+<strong>self-align</strong> the wall with the field profile. <strong>Any vessel motion
+during the ramp therefore reduces the peak-to-peak misalignment between the n ≤ 4 first-wall
+and toroidal-field profiles</strong>; it consumes none of the 6 mm budget, and in fact frees
+some of it back. The start-up ramp is a budget-relieving event for the n = 1 first-wall
+criterion, not a budget-eroding one.</div>
 
 <h3>Force scale &amp; timescale</h3>
 <p>Order-of-magnitude: with vessel image current of O(10<sup>5</sup> A) during the ramp,
@@ -311,7 +342,7 @@ contributors.</div>
 Author: <span class="author">Simon McIntosh</span>. Monte Carlo data generated reproducibly
 by <code>vv_mc_generator.py</code> (scipy HiGHS LP, max-departure-from-centre metric,
 N = 5000, fixed seed 20260527 → committed <code>data/</code>). Figures and animations by
-<code>vv_viz.py</code>; displacements magnified ×750 in diagrams. Centring parameters:
+<code>vv_viz.py</code>; displacements magnified ×500 in diagrams. Centring parameters:
 M ≈ 8000 t, 15° inclined dual hinge → L<sub>eff</sub> ≈ 26 m → K ≈ 3 kN/mm, T<sub>n</sub> ≈
 10 s, F<sub>stop</sub> ≈ 4.5 kN. Every number regenerates from the repository.
 Source: <code>Simon-McIntosh/vv</code>.
