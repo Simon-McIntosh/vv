@@ -47,7 +47,7 @@ from scipy.optimize import linprog
 from scipy.spatial import ConvexHull
 
 # ── geometry ──────────────────────────────────────────────────────────────────
-MAG     = 500       # displacement magnification for display
+MAG     = 1500      # displacement magnification for display (polytope-diagnostic)
 N       = 9         # number of supports
 R_M     = 8.0       # VV radius (m)
 R_SLOT  = 8.5       # slot display radius — slightly outside VV (m)
@@ -84,12 +84,24 @@ def lp_vec(u_m: np.ndarray, cvec) -> tuple[float, np.ndarray]:
 
 
 def max_rattle_mm(u_m: np.ndarray, nd: int = 36) -> float:
-    """Maximum rattle range (mm) over all 2-D translation directions."""
+    """Maximum peak-to-peak rattle range (mm) — polytope diameter."""
     best = 0.0
     for th in np.linspace(0, np.pi, nd):
         fwd, _ = lp_rattle(u_m, th)
         bwd, _ = lp_rattle(u_m, th + np.pi)
         best = max(best, fwd + bwd)
+    return best * 1000
+
+
+def max_departure_mm(u_m: np.ndarray, nd: int = 72) -> float:
+    """Maximum one-sided departure (mm) of the VV centre from the gravitational
+    centre q=0. This is the metric for forced excursion from the self-centred
+    rest position: the largest ||q[:2]|| reachable inside the feasible polytope.
+    """
+    best = 0.0
+    for th in np.linspace(0, 2 * np.pi, nd, endpoint=False):
+        _, q = lp_rattle(u_m, th)
+        best = max(best, float(np.hypot(q[0], q[1])))
     return best * 1000
 
 
@@ -270,9 +282,9 @@ def make_gif(u_m: np.ndarray, outpath: str, n_frames: int = 40,
         ax.clear()
         plot_vv(ax, q_frames[k], u_m, polytope_m=polytope)
         ax.set_title(
-            f"Translation rattle {rattle_mm:.2f} mm  ·  ×{MAG}  ·  "
-            f"shaded polygon = all reachable positions",
-            fontsize=8.0, color="#444", pad=3,
+            f"Forced excursion through the gravitational centre  ·  envelope diameter "
+            f"{rattle_mm:.2f} mm  ·  ×{MAG}  ·  shaded polygon = all reachable positions",
+            fontsize=7.5, color="#444", pad=3,
         )
 
     anim = FuncAnimation(fig, draw, frames=n_frames, interval=100)
@@ -441,33 +453,38 @@ def figure_mc_dashboard(rattles_mm: np.ndarray) -> str:
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5), facecolor="white")
     fig.subplots_adjust(left=0.08, right=0.97, top=0.88, bottom=0.12, wspace=0.3)
 
-    # histogram
+    # histogram of departure-from-centre
     ax1.hist(rattles_mm, bins=50, color="#2b5797", alpha=0.75,
              edgecolor="white", lw=0.4)
-    # compute LP worst-case range for nominal u=0
-    fwd_m, _ = lp_rattle(np.zeros(9), 0.0)
-    bwd_m, _ = lp_rattle(np.zeros(9), np.pi)
-    lp_range  = (fwd_m + bwd_m) * 1000
-    for pct, col, ls in [(95, "#cc8800", "--"), (99, "#cc2200", "--")]:
-        v = np.percentile(rattles_mm, pct)
-        ax1.axvline(v, color=col, lw=2, ls=ls, label=f"P{pct} = {v:.2f} mm")
-    ax1.axvline(rattles_mm.max(), color="#660000", lw=1.5, ls=":",
-                label=f"Max = {rattles_mm.max():.2f} mm")
-    ax1.axvline(lp_range, color="#888", lw=1.5, ls="-",
-                label=f"LP worst case = {lp_range:.2f} mm")
-    # explain the boundary pile-up at the ceiling (not an artifact: it converges
-    # in direction count and reflects assembly scatter rarely blocking the rattle)
-    ceil_frac = float(np.mean(rattles_mm >= lp_range - 0.05) * 100)
-    ax1.annotate(f"~{ceil_frac:.0f}% pile up at the {lp_range:.2f} mm ceiling\n"
-                 f"(worst-direction diameter is capped here;\nassembly scatter rarely blocks every direction)",
-                 xy=(lp_range, ax1.get_ylim()[1] * 0.40),
-                 xytext=(lp_range - 1.55, ax1.get_ylim()[1] * 0.86),
-                 fontsize=7.2, color="#7a1500", ha="left",
+    # nominal (u=0) departure = LP envelope half-width
+    nom_dep = max_departure_mm(np.zeros(9), nd=72)
+    # mode of the distribution
+    h, e = np.histogram(rattles_mm, bins=50)
+    mode = float(0.5 * (e[h.argmax()] + e[h.argmax() + 1]))
+    med  = float(np.median(rattles_mm))
+    p95  = float(np.percentile(rattles_mm, 95))
+    p99  = float(np.percentile(rattles_mm, 99))
+    rmax = float(rattles_mm.max())
+    ax1.axvline(mode, color="#228822", lw=1.5, ls="--", label=f"Mode = {mode:.2f} mm")
+    ax1.axvline(med, color="#1a6ea8", lw=1.5, ls="--", label=f"Median = {med:.2f} mm")
+    ax1.axvline(p95, color="#cc8800", lw=2, ls="--", label=f"P95 = {p95:.2f} mm")
+    ax1.axvline(p99, color="#cc2200", lw=2, ls="--", label=f"P99 = {p99:.2f} mm")
+    ax1.axvline(rmax, color="#660000", lw=1.5, ls=":", label=f"Max = {rmax:.2f} mm")
+    ax1.axvline(nom_dep, color="#888", lw=1.5, ls="-",
+                label=f"Nominal (u=0) = {nom_dep:.2f} mm")
+    ax1.annotate(f"Nominal (centred) gives the {nom_dep:.2f} mm symmetric envelope —\n"
+                 f"offset assemblies reach FURTHER from the gravitational centre\n"
+                 f"(max {rmax:.2f} mm); this is the kinematic ceiling on forced\n"
+                 f"departure from the self-centred rest position.",
+                 xy=(nom_dep, ax1.get_ylim()[1] * 0.45),
+                 xytext=(0.05, ax1.get_ylim()[1] * 0.85),
+                 fontsize=7.0, color="#444", ha="left",
                  arrowprops=dict(arrowstyle="->", color="#999", lw=1))
-    ax1.set_xlabel("Peak-to-peak rattle range (mm)", fontsize=10)
+    ax1.set_xlabel("Max forced departure from gravitational centre (mm)", fontsize=10)
     ax1.set_ylabel(f"Count  (n = {len(rattles_mm):,})", fontsize=10)
-    ax1.set_title("MC Rattle Distribution", fontsize=11, color="#1a3a6e")
-    ax1.legend(fontsize=8.5, frameon=False)
+    ax1.set_title("MC: VV departure-from-centre distribution",
+                  fontsize=11, color="#1a3a6e")
+    ax1.legend(fontsize=8.0, frameon=False, loc="upper left")
     ax1.spines[["top", "right"]].set_visible(False)
 
     # CDF
@@ -479,9 +496,9 @@ def figure_mc_dashboard(rattles_mm: np.ndarray) -> str:
         v = np.percentile(rattles_mm, pct)
         ax2.axvline(v, color=col, lw=1.5, ls="--",
                     label=f"P{pct} = {v:.2f} mm")
-    ax2.set_xlabel("Rattle range (mm)", fontsize=10)
+    ax2.set_xlabel("Max forced departure from centre (mm)", fontsize=10)
     ax2.set_ylabel("Percentile", fontsize=10)
-    ax2.set_title("Cumulative Distribution", fontsize=11, color="#1a3a6e")
+    ax2.set_title("Departure-from-centre — CDF", fontsize=11, color="#1a3a6e")
     ax2.legend(fontsize=8.5, frameon=False)
     ax2.spines[["top", "right"]].set_visible(False)
     ax2.set_ylim(0, 100)
@@ -494,39 +511,39 @@ def figure_mc_dashboard(rattles_mm: np.ndarray) -> str:
 
 def figure_partial_measurement(rattles_all: np.ndarray, u_ref=None) -> str:
     """
-    §8 figure (peak-to-peak range metric, n=1 wall displacement):
-      Left  — the rattle-range distribution. Measuring ALL 9 gaps collapses the
-              uncertainty to ONE value drawn from this distribution: most likely
-              near the mode (~2.5 mm), never 0, and at most the 3.09 mm ceiling.
-      Right — conditional P95 vs number of support gaps measured, for measured
-              values that are centred (the assembly target = the worst case →
-              flat) vs a typical random draw (declines only slowly). Shows that
-              measurement narrows the EXPECTED value, not the conservative bound,
-              and that one sector landed (k=1) barely moves it.
+    §8 figure under the departure-from-centre metric:
+      Left  — the departure-from-centre distribution. Measuring all 9 gaps
+              reveals ONE value from this distribution; centred assemblies
+              give the nominal LP envelope (~1.55 mm), offset assemblies can
+              reach FURTHER from the gravitational centre (up to ~2.9 mm).
+      Right — conditional P95 vs number of gaps measured. Measuring more
+              supports gradually narrows the conditional distribution; one
+              sector landed (k=1) gives no meaningful change.
     Returns base64 PNG.
     """
     fig, (ax_d, ax_k) = plt.subplots(1, 2, figsize=(13, 5.5), facecolor="white")
     fig.subplots_adjust(left=0.07, right=0.97, top=0.85, bottom=0.13, wspace=0.27)
 
-    # ── Left: the range distribution (what measurement "reveals") ──
     r = rattles_all
     h, e = np.histogram(r, bins=50)
     mode = float(0.5 * (e[h.argmax()] + e[h.argmax() + 1]))
     med  = float(np.median(r))
     q95  = float(np.percentile(r, 95))
-    ceiling = max_rattle_mm(np.zeros(N), nd=72)
+    nom  = max_departure_mm(np.zeros(N), nd=72)
+    rmax = float(r.max())
     ax_d.hist(r, bins=50, color="#2b5797", alpha=0.75, edgecolor="white", lw=0.4)
-    for x, c, lab in [(mode, "#228822", f"mode {mode:.2f}"),
+    for x, c, lab in [(nom,  "#888888", f"nominal (u=0) {nom:.2f}"),
+                      (mode, "#228822", f"mode {mode:.2f}"),
                       (med,  "#1a6ea8", f"median {med:.2f}"),
                       (q95,  "#cc8800", f"P95 {q95:.2f}"),
-                      (ceiling, "#cc2200", f"ceiling {ceiling:.2f}")]:
+                      (rmax, "#cc2200", f"max {rmax:.2f}")]:
         ax_d.axvline(x, color=c, lw=2, ls="--", label=lab)
-    ax_d.set_xlabel("Peak-to-peak rattle range (mm)", fontsize=10)
+    ax_d.set_xlabel("Max forced departure from gravitational centre (mm)", fontsize=10)
     ax_d.set_ylabel(f"Count  (n = {len(r):,})", fontsize=10)
     ax_d.set_title("Measuring all 9 gaps reveals ONE value from this\n"
-                   "distribution — most likely near the mode, never 0",
+                   "distribution (~mode for a typical assembly)",
                    fontsize=9.5, color="#1a3a6e")
-    ax_d.legend(fontsize=8.5, frameon=False)
+    ax_d.legend(fontsize=8.0, frameon=False, loc="upper right")
     ax_d.spines[["top", "right"]].set_visible(False)
 
     # ── Right: conditional P95 vs number of gaps measured ──
@@ -535,14 +552,14 @@ def figure_partial_measurement(rattles_all: np.ndarray, u_ref=None) -> str:
     q_cent, q_typ = [], []
     for k in ks:
         idx = list(range(k))
-        rc = np.empty(250)                       # measured = centred (worst/target)
+        rc = np.empty(250)                       # measured = centred
         for s in range(250):
             u = rng.uniform(-DELTA_M, DELTA_M, N)
             for i in idx:
                 u[i] = 0.0
-            rc[s] = max_rattle_mm(u, nd=18)
+            rc[s] = max_departure_mm(u, nd=18)
         q_cent.append(float(np.percentile(rc, 95)))
-        if k == 0:                               # measured = typical random draw
+        if k == 0:
             q_typ.append(float(np.percentile(rc, 95)))
         else:
             qs = []
@@ -553,25 +570,26 @@ def figure_partial_measurement(rattles_all: np.ndarray, u_ref=None) -> str:
                     u = rng.uniform(-DELTA_M, DELTA_M, N)
                     for j, i in enumerate(idx):
                         u[i] = vals[j]
-                    rt[s] = max_rattle_mm(u, nd=18)
+                    rt[s] = max_departure_mm(u, nd=18)
                 qs.append(np.percentile(rt, 95))
             q_typ.append(float(np.mean(qs)))
-    ax_k.plot(ks, q_cent, "o-", color="#cc2200", lw=2,
-              label="measured = centred (target = worst case)")
-    ax_k.plot(ks, q_typ, "s-", color="#228822", lw=2,
+    ax_k.plot(ks, q_cent, "o-", color="#228822", lw=2,
+              label="measured = centred (lowest departure)")
+    ax_k.plot(ks, q_typ, "s-", color="#cc8800", lw=2,
               label="measured = typical random values")
-    ax_k.axhline(ceiling, color="#888", lw=1.2, ls=":", label=f"3.09 mm ceiling")
+    ax_k.axhline(nom, color="#888", lw=1.2, ls=":",
+                 label=f"nominal envelope (u=0) = {nom:.2f} mm")
     ax_k.annotate("one sector\nlanded (today)", xy=(1, q_typ[1]),
                   xytext=(1.8, 2.05), fontsize=8, color="#444",
                   arrowprops=dict(arrowstyle="->", color="#888"))
     ax_k.set_xlabel("Number of support gaps measured (k of 9)", fontsize=10)
-    ax_k.set_ylabel("Conditional P95 rattle range (mm)", fontsize=10)
-    ax_k.set_title("Measurement narrows the EXPECTED value, not the bound\n"
-                   "(a centred assembly stays at the 3.09 mm worst case)",
+    ax_k.set_ylabel("Conditional P95 departure from centre (mm)", fontsize=10)
+    ax_k.set_title("Measurement narrows the conditional distribution;\n"
+                   "one sector landed (k=1) gives no meaningful change",
                    fontsize=9.5, color="#1a3a6e")
     ax_k.set_xticks(ks)
-    ax_k.set_ylim(1.5, 3.25)
-    ax_k.legend(fontsize=8, frameon=False, loc="lower left")
+    ax_k.set_ylim(1.2, 2.6)
+    ax_k.legend(fontsize=8, frameon=False, loc="upper right")
     ax_k.spines[["top", "right"]].set_visible(False)
 
     buf = io.BytesIO()

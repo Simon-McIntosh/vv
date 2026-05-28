@@ -33,331 +33,348 @@ pre{background:#f5f5f5;border:1px solid #ddd;border-radius:4px;padding:.8em 1em;
 </head>
 <body>
 <h1>ITER VV Lateral Rattle — Research Findings</h1>
-<p style="color:#666;font-size:.9em">Revised 2026-05-27 &nbsp;·&nbsp;
-5,000-sample MC &nbsp;·&nbsp; scipy HiGHS LP &nbsp;·&nbsp; 3-DOF rigid-body model (Δx, Δy, Δθ)
-&nbsp;·&nbsp; metric: peak-to-peak range (n=1 wall displacement)</p>
+<p style="color:#666;font-size:.9em">Revised 2026-05-28 &nbsp;·&nbsp;
+5,000-sample MC &nbsp;·&nbsp; scipy HiGHS LP &nbsp;·&nbsp; 3-DOF rigid-body model
+&nbsp;·&nbsp; metric: <strong>max departure from gravitational centre (n=1 first-wall shift)</strong></p>
 
 <div class="callout key">
-<strong>Key result:</strong> The vacuum vessel can rattle laterally over a
-<strong>peak-to-peak range of 3.09 mm</strong> at the worst (nominal, fully-centred)
-assembly — a hard theoretical ceiling. This lateral motion is an <strong>n=1 rigid
-displacement of the first wall</strong>: it shifts the plasma–wall gap toroidally and,
-during limited start-up on the inner wall, localises the heat load. Monte Carlo over
-random assemblies (peak-to-peak range): <strong>P95 = 3.01 mm</strong>, P99 = 3.09 mm,
-median = 2.24 mm, mode ≈ 2.49 mm. The bound is set by the <strong>3 mm toroidal
-assembly slot</strong> and is largely irreducible by assembly control. A separate
-<strong>±187.5 µrad rotation</strong> mode is n=0 (it does not perturb the plasma–wall gap).
-</div>
-
-<div class="callout ok">
-<strong>Slot allowance — confirmed:</strong> the toroidal slot allowance is
-<strong>±1.5 mm (3 mm total travel)</strong> about the assembly position, confirmed against
-the gravity-support design (2026-05-27). All figures below use this value. The analysis is
-exactly linear in the gap (a ±3 mm slot would double every number), so the confirmed ±1.5 mm
-fixes the scale.
+<strong>Key result:</strong> The VV is supported by 9 inward-inclined dual-hinge gravity supports
+that act as a <strong>gravitational pendulum well</strong> in the lateral DOF — the vessel
+<strong>self-centres</strong> at rest. The relevant rattle metric is therefore the
+<strong>maximum forced departure from the gravitational centre</strong>, not the peak-to-peak
+range. With the toroidal slot at ±1.5 mm (confirmed), the nominal LP envelope half-width is
+<strong>1.547 mm</strong>; the 5000-sample MC over independent assembly offsets gives
+<strong>P95 = 2.27 mm</strong>, P99 = 2.53 mm, median 1.53 mm, mode ≈ 1.49 mm, max observed
+<strong>2.98 mm</strong> — single-sided departures from centre under sufficient forced load.
+Two EM load cases drive forced departure: <strong>(a)</strong> the 0→3 MA, 10 s plasma current
+ramp (estimated lateral force <em>comparable</em> to the gravitational restoring; near-resonant
+with the ~10 s natural period but single-event, so peak excursions stay O(1 mm)); and
+<strong>(b)</strong> disruptions (MN-scale impulse → vessel velocity → impact at the ±1.5 mm
+stops — a potentially bounding dynamic load case for the VVGS).
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════ §1 -->
-<h2 id="s1">§1 — Physical Mechanism</h2>
+<h2 id="s1">§1 — Physical Mechanism: the Inclined-Hinge Gravity Support</h2>
 
-<p>The ITER Vacuum Vessel rests on <strong>9 gravity supports</strong> equally spaced
-toroidally on a support ring of radius <strong>R ≈ 8 m</strong>. Each support is a
-<em>four-bar linkage</em> that accommodates large <strong>radial</strong> displacements
-(thermal growth, assembly) with negligible toroidal stiffness. At the top of each linkage a
-pin with its axis in the <strong>toroidal direction</strong> carries the VV bracket, which
-is mechanically limited to <strong>±1.5 mm</strong> of toroidal travel about its assembly
-position. Radial motion is free; toroidal motion is the constrained "rattle".</p>
-
-<h3>Constraint model</h3>
-<p>For a rigid-body displacement <strong>q = [Δx, Δy, Δθ]</strong> (horizontal translation
-and rotation about the vertical machine axis), the toroidal slide at support <em>i</em> is</p>
-<pre>δᵢ = −sin(φᵢ)·Δx + cos(φᵢ)·Δy + R·Δθ     (= A[i,:]·q)</pre>
-<p>with φᵢ = π/2 − 2πi/9 and R = 8 m. The 9×3 constraint matrix satisfies
-<strong>AᵀA = diag(4.5, 4.5, 576)</strong> — exactly diagonal, so the three DOFs are
-mutually orthogonal (uncorrelated). At assembly the bracket sits at offset u<sub>i</sub>
-within its slot; the mechanical limit requires</p>
-<pre>|u_i + δᵢ| ≤ 1.5 mm   ∀ i</pre>
-
-<div class="callout warn">
-<strong>Method note (a ruled-out approach):</strong> projecting the assembly offsets onto
-Col(A) with the pseudoinverse A⁺ is <em>physically wrong</em> — it assumes the gaps form a
-consistent rigid-body mode and yields infeasible support slides (&gt;1.5 mm). Assembly
-offsets are <em>independent</em> at each support and the reachable motion is a constrained
-linear program (below). The earlier pseudoinverse scripts have been removed from the repo.
-</div>
-
-<!-- ═══════════════════════════════════════════════════════════ §2 -->
-<h2 id="s2">§2 — Why It Matters: Two Distinct Consequences</h2>
-
-<p>The lateral rattle is a rigid <em>horizontal</em> shift of the vessel (Δx, Δy). It has two
-largely independent consequences, both bounded by the peak-to-peak range of §7 — one
-quasi-static, one dynamic.</p>
+<p>The ITER Vacuum Vessel rests on <strong>9 gravity supports (VVGS)</strong> equally spaced
+toroidally beneath the lower ports, on a ring of radius <strong>R<sub>s</sub> ≈ 8 m</strong>.
+Each VVGS is a <strong>dual-hinge mechanism inclined at 15° from vertical</strong>, leaning
+inward toward the machine axis. The dual-hinge geometry permits radial motion of the vessel
+(needed for thermal expansion between assembly and the 100 °C operation / 200 °C bake
+conditions) by rotation of the dowels, while the dowels' rigidity restrains toroidal and
+vertical motion. The toroidal restraint takes the form of a <strong>±1.5 mm (3 mm total)</strong>
+dowel slot — confirmed against the GS design.</p>
 
 <div class="callout key">
-<strong>(a) n=1 first-wall positioning (quasi-static).</strong> A horizontal shift moves the
-first wall sideways relative to the plasma axis, so the plasma–wall gap varies as
-cos(toroidal angle) — a textbook <strong>n=1 perturbation</strong>. The vessel "lands, then
-moves, then moves again": between shots it settles to a different position within its
-envelope. When the plasma is <strong>limited on the inner wall during start-up</strong>, the
-gap asymmetry makes it contact preferentially where the gap has closed, <strong>localising the
-start-up heat load</strong> toroidally. n=1 is precisely the error tokamak operation works
-hard to avoid.</div>
+<strong>The inclination is deliberate — it provides a gravitational centering force.</strong>
+The 15° inward tilt arranges the nine support struts so that their axes converge on the machine
+vertical axis at a point <em>above</em> the vessel centre of gravity. For the lateral (n = 1)
+mode the vessel therefore behaves as if suspended from that convergence point — an
+<strong>inclined-hinge gravitational pendulum</strong>. The radial DOF is not free; it sits in a
+parabolic potential well centred on the nominal position.</div>
 
-<div class="callout warn">
-<strong>(b) Electromagnetic-driven impact (dynamic).</strong> Because the vessel is
-<em>mobile</em> within its ±1.5 mm slots, EM loads (disruptions, VDEs, halo currents) can
-accelerate it across the gap until it <strong>impacts its end-stops</strong>. The resulting
-shock loads on the gravity supports — and the fatigue from repeated impact cycling over the
-machine life — can be significant and must be assessed dynamically. The peak-to-peak range is
-the free travel available before impact; this is a genuine structural-dynamics and fatigue
-concern, not only a static positioning number.</div>
-
-<p><strong>Rotation is different.</strong> A rotation Δθ about the vertical axis turns the
-(axisymmetric) torus about its own axis — it does <strong>not</strong> change the
-plasma–wall gap (n = 0). It only shifts discrete features (tiles, ports) toroidally by
-R·Δθ. Rotation is therefore reported separately (§9) as a local-alignment mode and is
-<em>not</em> folded into the n=1 heat-load number.</p>
-
-<!-- ═══════════════════════════════════════════════════════════ §3 -->
-<h2 id="s3">§3 — LP Formulation &amp; Rattle Polytope</h2>
-
-<p><strong>Linear programming</strong> is the correct solver. Given assembly state
-u ∈ ℝ⁹, the maximum reach of the VV centre in direction θ is</p>
-<pre>max  [cos θ, sin θ, 0] · q
-s.t.  A·q ≤ 1.5 − u
-     −A·q ≤ 1.5 + u          (mm)
-      q free  (Δθ optimised)</pre>
-<p>The feasible set is a convex polytope in ℝ³; its projection onto (Δx, Δy) is the
-<strong>rattle polytope</strong> — every reachable VV-centre position (blue shaded region in
-the diagrams). The <strong>rattle metric used throughout this report is the peak-to-peak
-range</strong>: the full diameter of this polytope along its widest axis,
-= reach(θ) + reach(θ+π) maximised over θ. (The one-sided reach — the radius — is half of
-this for the symmetric nominal case; it is a different quantity and is not used as the
-bound.)</p>
-
-<p>The nominal (u = 0) polytope is a near-circle of <strong>diameter 3.093 mm</strong>
-(one-sided reach 1.547 mm; 20 vertices; X/Y aspect 1.015, reflecting the 9-fold support
-symmetry).</p>
-
-<!-- ═══════════════════════════════════════════════════════════ §4 -->
-<h2 id="s4">§4 — Why the Range Slightly Exceeds 3 mm</h2>
-
-<p>A single bracket travels ±1.5 mm (3 mm total), yet the nominal peak-to-peak range is
-<strong>3.093 mm</strong>. The reason is geometric, and it is worth stating correctly.</p>
-
+<h3>Centering-force model</h3>
+<p>With the convergence point at height
+<code>h = R<sub>s</sub>/tan(15°) ≈ 31.3 m</code> above the support attachments and the VV CoG
+roughly 5 m above the supports, the effective pendulum length is
+<code>L<sub>eff</sub> ≈ 26 m</code>. (L<sub>eff</sub> is sensitive to the inclination — about
+2 m per degree of angle change.) The lateral restoring stiffness is</p>
+<pre>K<sub>lateral</sub>  =  W / L<sub>eff</sub></pre>
+<p>where W is the supported weight. With M ≈ 8000 t (VV plus in-vessel components) →
+W ≈ 78 MN, the headline parameters are:</p>
 <table>
-<tr><th>Support</th><th>φ (°)</th><th>Δx coefficient (−sin φ)</th><th>+X reach in isolation</th></tr>
-<tr><td>0 (top)</td><td>90</td><td class="num">−1.00</td><td>1.5/1.00 = 1.500 mm — tightest</td></tr>
-<tr><td>3</td><td>−30</td><td class="num">+0.50</td><td>1.5/0.50 = 3.000 mm</td></tr>
-<tr><td>4, 5</td><td>−70, −110</td><td class="num">+0.94</td><td>1.5/0.94 = 1.596 mm</td></tr>
-<tr><td>2, 7</td><td>10, 170</td><td class="num">∓0.17</td><td>1.5/0.17 = 8.64 mm — nearly free</td></tr>
+<tr><th>Quantity</th><th>Value</th><th>Notes</th></tr>
+<tr class="hi"><td>Lateral centering stiffness K</td><td class="num">~ 3.0 MN/m ≡ 3.0 kN/mm</td><td>Soft (long pendulum)</td></tr>
+<tr><td>Natural frequency / period</td><td class="num">f ≈ 0.097 Hz · T<sub>n</sub> ≈ 10.3 s</td><td>Depends on L<sub>eff</sub> only, not on M</td></tr>
+<tr><td>Force to reach the ±1.5 mm stop</td><td class="num">F<sub>stop</sub> = K·1.5 mm ≈ 4.5 kN</td><td>≈ 6×10⁻⁵ of the 78 MN weight</td></tr>
+<tr><td>Rest position (no lateral force)</td><td class="num">q* = 0 (centred)</td><td>Gravitational PE minimum</td></tr>
 </table>
 
-<div class="callout info">
-<strong>Sine-angle intuition (corrected).</strong> The Δx coefficient is <strong>−sin φ</strong>
-(not cosine), so a support's grip on +X scales with <strong>|sin φ|</strong>: it is
-<em>maximal</em> at the top/bottom (φ = ±90°, +X is purely toroidal there) and falls to
-<em>zero</em> at the sides (φ = 0°/180°, where +X is purely radial and thus free). A support
-positioned away from the top/bottom is <em>looser</em> on +X — its isolation limit rises
-from 1.500 mm toward infinity. The top support alone would cap +X at exactly 1.500 mm.</div>
+<!-- ═══════════════════════════════════════════════════════════ §2 -->
+<h2 id="s2">§2 — How the Centering Force Reframes the Analysis</h2>
 
-<p>The extra reach to 1.547 mm comes from the <strong>rotation DOF</strong>. Locking
-Δθ = 0 gives exactly 1.500 mm (top support binding). Allowing rotation, the LP finds
-Δx = 1.547 mm, Δy ≈ 0, <strong>Δθ = +5.83 µrad</strong> — a vertex where <strong>three</strong>
-constraints bind simultaneously: supports <strong>0, 4 and 5</strong>. Support 0 (top) is
-<em>still binding</em> (δ₀ = −1.500 mm exactly); the rotation term R·Δθ = +0.047 mm holds it
-on its stop while letting supports 4 and 5 reach their +1.5 mm stops at a slightly larger
-Δx. So the range exceeds 3 mm not because any support is "unlocked," but because the optimum
-sits at a 3-support vertex that exploits the slack of the angled supports. (The achievable
-Δx is independent of R; R only sets the tiny rotation needed.) Half-range × 2 = 1.547 × 2
-= <strong>3.093 mm</strong>.</p>
+<p>The centering force changes the nature of the problem. The earlier kinematic model
+(vessel free to sit anywhere within the ±1.5 mm gaps) gave a <em>peak-to-peak</em> envelope of
+3.09 mm and treated the assembly offsets u<sub>i</sub> as setting the vessel's rest position.
+With the gravitational well, the picture changes:</p>
+
+<ul>
+<li><strong>At rest the vessel self-centres</strong> to the gravitational minimum
+(q = 0, n = 1 ≈ 0), <em>regardless</em> of the toroidal assembly offsets. The pins simply
+sit at u<sub>i</sub> in their ±1.5 mm slots; the vessel is centred. Between shots the
+gravitational restoring re-centres the wall.</li>
+<li><strong>The relevant metric becomes the maximum forced departure from centre</strong>
+(single-sided), not the peak-to-peak range. The departure is bounded by the kinematic gap
+polytope, but only reached when a lateral force exceeds the soft restoring.</li>
+<li><strong>The polytope itself is the kinematic ceiling on forced departure</strong> — the
+furthest the VV centre can be pushed from q = 0 under any external force. It depends on the
+assembly offsets but has a hard nominal envelope half-width of 1.547 mm.</li>
+<li><strong>Disruption impacts at the stops become a dynamic load case</strong>: a MN-scale
+EM impulse over ~ms accelerates the vessel; the soft centering barely decelerates it; it
+hits the dowel stops with kinetic energy that the VVGS must absorb.</li>
+</ul>
+
+<!-- ═══════════════════════════════════════════════════════════ §3 -->
+<h2 id="s3">§3 — Constraint Model &amp; LP</h2>
+
+<p>For a rigid-body displacement <strong>q = [Δx, Δy, Δθ]</strong>, the toroidal slide at
+support i is</p>
+<pre>δᵢ = −sin(φᵢ)·Δx + cos(φᵢ)·Δy + R·Δθ     (= A[i,:]·q)</pre>
+<p>with φᵢ = π/2 − 2πi/9 and R = 8 m. <strong>AᵀA = diag(4.5, 4.5, 576)</strong> — exactly
+diagonal, so the three DOFs are mutually orthogonal. The toroidal-slot constraint at each
+support is |u<sub>i</sub> + δᵢ| ≤ 1.5 mm. The set of reachable VV-centre positions from
+q = 0 is the convex projection of this 3-DOF polytope onto (Δx, Δy) — the
+<strong>rattle polytope</strong> shown in the diagrams. The maximum one-sided departure from
+q = 0 is the support function of this polytope, and is what we Monte Carlo over.</p>
+
+<!-- ═══════════════════════════════════════════════════════════ §4 -->
+<h2 id="s4">§4 — Why the Nominal Envelope Slightly Exceeds 1.5 mm</h2>
+
+<p>A single bracket travels ±1.5 mm yet the nominal envelope reaches 1.547 mm (and the
+peak-to-peak diameter 3.093 mm). The Δx coefficient at support i is <strong>−sin φᵢ</strong>,
+so the +X grip scales with |sin φᵢ|: tightest at top/bottom (φ = ±90°, |sin| = 1) and falls
+to zero at the sides (φ = 0/180°, |sin| = 0 — +X is purely radial there and free). The
+extra 0.047 mm beyond a single bracket's 1.5 mm comes from the rotation DOF — the LP finds a
+3-support binding vertex (supports 0, 4, 5) at which Δθ = +5.83 µrad allows Δx = 1.547 mm.
+This is the (small) geometric reason the polytope is slightly larger than a single bracket
+slot.</p>
 
 <!-- ═══════════════════════════════════════════════════════════ §5 -->
-<h2 id="s5">§5 — State Diagrams with Rattle Polytope</h2>
+<h2 id="s5">§5 — State Diagrams (×1500 magnification)</h2>
 
-<p>Each panel shows the VV (thick blue ring) at its maximum +X position; the orange spoke
-(support 0) is an orientation marker, and the blue shaded polygon is the rattle polytope —
-all positions reachable from that assembly state. Displacements are magnified ×500.</p>
-
-<div class="callout info">
-<strong>Reading the supports.</strong> At each support the grey toroidal slot (with red
-±1.5 mm end-stops) is held at a <em>constant radial distance from the vessel wall</em> — the
-four-bar linkage moves radially with the vessel, so radial motion is free. The grey bracket
-connects the wall to the coloured pin, whose position in the slot shows how much of the
-±1.5 mm <em>toroidal</em> travel is used: <span style="color:#1a6ea8;font-weight:bold">blue</span>
-= slack, <span style="color:#e07000;font-weight:bold">orange</span> = near the limit,
-<span style="color:#cc2200;font-weight:bold">red</span> = hard against the stop. Watch the
-slots track the vessel radially while the pins slide toroidally — that is the whole
-mechanism in one picture.</div>
+<p>Each panel shows the VV (blue ring) at its maximum +X displacement, with the rattle
+polytope (blue shaded polygon) drawn around the gravitational centre (the + sign at the
+machine axis). The orange spoke is support 0 (orientation marker). Displacements are
+magnified <strong>×1500</strong> so the polytope is clearly visible — it is the central
+diagnostic of this report.</p>
 
 <figure>
   <img src="plots/vv_states.png" alt="Three-panel VV state diagram">
   <figcaption>
-    Left: nominal assembly (u = 0) — polytope ≈ circle, 3.09 mm diameter. &nbsp;
-    Middle: worst MC sample — polytope shifted/asymmetric. &nbsp;
-    Right: alternating ±1.5 mm offsets — polytope collapses (VV locked, range ≈ 0).
+    Left: nominal assembly (u = 0) — polytope ≈ circle of half-width 1.55 mm centred on
+    the machine axis. &nbsp; Middle: worst MC sample — polytope shifted/asymmetric so the
+    far corner reaches further from q = 0. &nbsp; Right: alternating ±1.5 mm offsets — the
+    polytope collapses (the VV is locked).
   </figcaption>
 </figure>
 
 <div class="callout info">
-<strong>The locked case.</strong> If alternating supports sit at +1.5 and −1.5 mm, any
-lateral motion tightens one bracket or another and the VV is fully locked (range = 0). This
-confirms the rattle depends on the actual assembly state, not just the gap size — and that
-the worst case is the <em>centred</em> assembly (the assembly team's target), not a random one.
+<strong>Reading the supports.</strong> Each grey toroidal slot (with red ±1.5 mm end-stops)
+is held at a <em>constant radial distance from the vessel wall</em> — the four-bar linkage
+moves radially with the vessel, so radial motion is free. The grey bracket connects the wall
+to the coloured pin, whose position in the slot shows how much of the ±1.5 mm
+<em>toroidal</em> travel is used:
+<span style="color:#1a6ea8;font-weight:bold">blue</span> = slack,
+<span style="color:#e07000;font-weight:bold">orange</span> = near the limit,
+<span style="color:#cc2200;font-weight:bold">red</span> = hard against the stop.
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════ §6 -->
-<h2 id="s6">§6 — Animated Rattle: Worst Case &amp; Typical Assembly</h2>
+<h2 id="s6">§6 — Animated Forced Excursion: Worst &amp; Typical Assembly</h2>
 
-<p>The VV rocks along its principal rattle axis; the blue polygon (fixed) is the rattle
-polytope and the red dot traces the VV centre. Rotation during translation is negligible
-(≈ 0.17° at ×500), confirming the lateral motion is essentially pure n=1 translation.</p>
+<p>The animations show the VV rocked through the full polytope along its principal axis —
+the kinematic envelope of possible <em>forced</em> motion about the gravitational centre.
+At rest the vessel sits at the middle frame (q = 0); under sufficient lateral force it can
+be driven to the extremes.</p>
 
 <figure>
-  <img src="animations/rattle_worst_case.gif" alt="Worst-case rattle animation">
-  <figcaption><strong>Worst case</strong> — peak-to-peak range <strong>3.09 mm</strong>
-  (the design bound; equals the nominal/centred ceiling) · ×500 magnification</figcaption>
+  <img src="animations/rattle_worst_case.gif" alt="Worst-case forced excursion">
+  <figcaption><strong>Worst MC sample</strong> — max one-sided departure ≈ 2.98 mm
+  (polytope diameter ≈ 3.09 mm) · ×1500 magnification</figcaption>
 </figure>
 
 <figure>
-  <img src="animations/rattle_mode.gif" alt="Near-mode (typical) rattle animation">
-  <figcaption><strong>Typical as-built assembly</strong> (drawn near the distribution mode)
-  — peak-to-peak range <strong>≈ 2.49 mm</strong> · the value an as-built machine is most
-  likely to exhibit · ×500 magnification</figcaption>
+  <img src="animations/rattle_mode.gif" alt="Near-mode (typical) forced excursion">
+  <figcaption><strong>Typical as-built assembly</strong> (drawn near the mode) — max one-sided
+  departure ≈ 1.49 mm (the most likely value) · ×1500 magnification</figcaption>
 </figure>
 
 <!-- ═══════════════════════════════════════════════════════════ §7 -->
-<h2 id="s7">§7 — Monte Carlo Results (5,000 samples)</h2>
+<h2 id="s7">§7 — Monte Carlo: Departure-from-Centre Distribution</h2>
 
 <p>5,000 assemblies; offsets drawn independently from Uniform(−1.5, +1.5) mm at each of the
-9 supports. For each sample the rattle is the full <strong>peak-to-peak range</strong> along
-the principal direction (72-direction LP sweep). Generated reproducibly by
-<code>vv_mc_generator.py</code> (fixed seed 20260527).</p>
+9 supports. For each sample we compute the maximum one-sided departure from the gravitational
+centre q = 0, via 72-direction LP sweep. Generated reproducibly by
+<code>vv_mc_generator.py</code> (seed 20260527).</p>
 
 <figure>
   <img src="plots/mc_dashboard.png" alt="MC histogram and CDF">
-  <figcaption>Peak-to-peak range distribution (left) and CDF (right); the nominal LP ceiling
-  (3.09 mm) and key percentiles are marked.</figcaption>
+  <figcaption>Distribution and CDF of the maximum one-sided departure from the gravitational
+  centre. Nominal (u = 0) gives 1.547 mm; offset assemblies reach further (up to ~2.9 mm).</figcaption>
 </figure>
 
 <table>
-<tr><th>Statistic</th><th>Peak-to-peak range (mm)</th><th>Notes</th></tr>
-<tr class="hi"><td>LP ceiling (nominal u = 0)</td><td class="num">3.093</td><td>Hard theoretical maximum; centred assembly = worst case = team's target</td></tr>
-<tr><td>MC maximum observed</td><td class="num">3.093</td><td>A random sample reaching the ceiling</td></tr>
-<tr class="hi"><td>P95</td><td class="num">3.013</td><td>95th percentile of random assemblies</td></tr>
-<tr><td>P99</td><td class="num">3.092</td><td></td></tr>
-<tr><td>P90</td><td class="num">2.897</td><td></td></tr>
-<tr><td>Mode</td><td class="num">2.49</td><td>Most probable as-built value</td></tr>
-<tr><td>P50 (median)</td><td class="num">2.244</td><td>Typical random assembly</td></tr>
-<tr><td>Minimum observed</td><td class="num">0.23</td><td>A near-blocking assembly</td></tr>
+<tr><th>Statistic</th><th>Max departure (mm)</th><th>Notes</th></tr>
+<tr><td>Nominal (u = 0)</td><td class="num">1.547</td><td>Symmetric envelope half-width</td></tr>
+<tr><td>Mode</td><td class="num">~ 1.49</td><td>Most probable as-built value</td></tr>
+<tr><td>P50 (median)</td><td class="num">1.53</td><td>Typical random assembly</td></tr>
+<tr><td>P90</td><td class="num">2.12</td><td></td></tr>
+<tr class="hi"><td>P95</td><td class="num">2.27</td><td>95th percentile of random assemblies</td></tr>
+<tr><td>P99</td><td class="num">2.53</td><td></td></tr>
+<tr class="hi"><td>Max observed (n = 5000)</td><td class="num">2.98</td><td>Kinematic ceiling on forced departure</td></tr>
 </table>
 
-<div class="callout warn">
-<strong>Interpretation — and a caution.</strong> The peak-to-peak range is <em>robust</em> to
-assembly scatter: random offsets shrink the polytope diameter only modestly (P95 = 3.01 mm
-is barely below the 3.09 mm ceiling), and only the pathological alternating pattern locks it.
-The spike at the right edge of the histogram is a <strong>boundary pile-up</strong>: the range
-is the worst-direction polytope diameter, hard-capped at 3.093 mm, and a few percent of random
-assemblies fail to block the rattle in <em>any</em> direction and so sit on the ceiling. (It
-converges with direction count — physical, not a numerical artifact.)
-Crucially, the assembly team <em>aims</em> to centre the brackets (u ≈ 0) — which is exactly
-the worst case (3.09 mm). So P95 is <strong>not</strong> a relaxation of the design case: use
-<strong>3.09 mm</strong>. The single-sided offset of the VV centre from the machine axis is
-≈ 1.55 mm for a centred assembly, up to ≈ 2.90 mm for an unlucky offset assembly.</div>
+<div class="callout ok">
+<strong>This is the metric that feeds the n = 1 first-wall budget.</strong> Quiescent
+(no significant lateral load) the vessel sits at q = 0 and the n = 1 wall contribution is
+≈ 0. Under sufficient forced lateral load the vessel can depart from centre up to the
+polytope boundary — the MC bounds that <em>kinematic</em> ceiling at P95 = 2.27 mm,
+worst-case ≈ 2.98 mm.</div>
 
 <!-- ═══════════════════════════════════════════════════════════ §8 -->
-<h2 id="s8">§8 — Effect of Gap Measurements</h2>
+<h2 id="s8">§8 — Effect of Gap Measurements (much more powerful under this metric)</h2>
 
-<p>If the team measures bracket gaps at some supports (feeler gauges, laser trackers, CMM),
-each measurement replaces an unknown u<sub>i</sub> with its true value. It does
-<em>not</em> narrow that support's 3 mm constraint band — it only fixes where the band sits.
-The bound therefore tightens only when a measured offset happens to be large enough to become
-a binding constraint.</p>
+<p>This is an important reversal from the previous (peak-to-peak diameter) framing. The
+polytope <em>diameter</em> is set by the 3 mm slot and is essentially insensitive to the
+assembly offsets — measuring gaps barely tightens it. The <strong>departure from the
+gravitational centre is governed by how far the polytope is offset from q = 0</strong>, and
+that offset is exactly what the u<sub>i</sub> set — so <strong>each measured gap directly
+tightens the conditional departure distribution</strong>. In the limit of all 9 measured
+and found near-centred, the conditional max departure collapses to the
+<strong>1.55 mm nominal envelope</strong>; a typical-random measurement set narrows toward
+the unconditional distribution.</p>
 
 <figure>
   <img src="plots/partial_measurement.png" alt="Measurement impact">
-  <figcaption>Left: the range distribution — measuring all 9 gaps reveals one value from it
-  (most likely near the mode, never 0). Right: conditional P95 vs number of gaps measured —
-  flat at the 3.09 mm ceiling if the measured supports are centred, declining only slowly
-  for typical values.</figcaption>
+  <figcaption>Left: the departure distribution — measuring all 9 gaps reveals ONE value from
+  it. Right: conditional P95 vs number of gaps measured, for measured values that are
+  centred (lowest departure) vs typical random.</figcaption>
 </figure>
 
 <table>
-<tr><th>Supports measured (k of 9)</th><th>Conditional P95 (mm)</th><th>Effect</th></tr>
-<tr class="hi"><td>0 (none — today's design state)</td><td class="num">3.01</td><td>baseline</td></tr>
-<tr><td>1 &nbsp;<em>(one sector landed)</em></td><td class="num">≈ 3.0</td><td>no meaningful change</td></tr>
-<tr><td>2</td><td class="num">≈ 3.0</td><td>negligible</td></tr>
-<tr><td>4</td><td class="num">≈ 2.9</td><td>marginal</td></tr>
-<tr><td>6</td><td class="num">≈ 2.6</td><td>tightening begins</td></tr>
-<tr><td>9 (all)</td><td class="num">deterministic ≈ 2.5</td><td>one value; range 0.2–3.09; <strong>never 0</strong></td></tr>
+<tr><th>Supports measured (k of 9)</th><th>Conditional P95 — measured centred (mm)</th><th>Conditional P95 — measured typical (mm)</th><th>Net effect</th></tr>
+<tr><td>0 (none)</td><td class="num">2.27</td><td class="num">2.27</td><td>baseline</td></tr>
+<tr><td>1 &nbsp;<em>(one sector landed)</em></td><td class="num">≈ 2.2</td><td class="num">≈ 2.2</td><td>small but real tightening</td></tr>
+<tr><td>3</td><td class="num">≈ 2.0</td><td class="num">≈ 2.1</td><td>moderate tightening</td></tr>
+<tr><td>5</td><td class="num">≈ 1.8</td><td class="num">≈ 2.0</td><td>substantial tightening</td></tr>
+<tr><td>9 (all)</td><td class="num">→ 1.55 (nominal env.)</td><td class="num">deterministic</td><td>collapsed to a single value</td></tr>
 </table>
 
-<div class="callout warn">
-<strong>Measurement reveals, it does not relieve.</strong> Measuring all 9 gaps collapses the
-<em>uncertainty</em> to zero, not the rattle to zero: it converts the problem to a
-deterministic LP whose answer is that assembly's actual range — most likely near the mode
-(≈ 2.5 mm), anywhere in 0.2–3.09 mm, and <strong>3.09 mm if the assembly is centred</strong>
-(the target). The previously-reported "9 supports → ~0 mm" was incorrect.</div>
-
-<div class="callout info">
-<strong>No "tightest-coupled cluster" to target.</strong> Because AᵀA = diag(4.5, 4.5, 576)
-is exactly diagonal, the three rigid-body DOFs are uncorrelated; measuring <em>adjacent</em>
-versus <em>spread-out</em> supports is statistically identical. The only thing that helps is
-measuring <em>more</em> supports (raising the chance of catching a binding one). Example: with
-supports 3 and 4 measured (+X coefficients 0.50 and 0.94) the conditional P95 falls by &lt; 1% —
-negligible.</div>
-
 <div class="callout key">
-<strong>Current state — one sector landed.</strong> With approximately one VV sector landed on
-its gravity support (k = 1 known gap), the q95 rattle bound is statistically indistinguishable
-from the all-unknown baseline. <strong>The bound to use today remains 3.09 mm peak-to-peak.</strong>
-A material reduction requires roughly five or more sectors landed and gap-measured, and even
-then it is an uncertain gamble on the measured values rather than a guaranteed reduction.</div>
+<strong>One sector landed (today)</strong> already tightens the q95 modestly; the
+diagonal structure of AᵀA still means adjacent vs spread-out is statistically the same,
+only the <em>number</em> of measurements matters. <strong>Each additional measured sector
+incrementally tightens the n = 1 budget</strong> — a clear path to bound reduction as
+landing progresses (in contrast to the previous diameter framing, which gave no relief
+from measurements).</div>
 
 <!-- ═══════════════════════════════════════════════════════════ §9 -->
-<h2 id="s9">§9 — Rotation: a Separate n=0 Mode</h2>
+<h2 id="s9">§9 — Rotation (n = 0, Separate Mode)</h2>
 
-<p>The VV can also rotate about the vertical axis. The LP for maximum Δθ gives a range of
-<strong>±187.5 µrad (0.375 mrad)</strong>: in pure rotation all 9 brackets slide
-synchronously by the same R·Δθ = ±1.5 mm and bind together. At ×500 this is ±5.37° — clearly
-visible as the orange spoke sweeps.</p>
+<p>The LP for maximum Δθ gives a range of <strong>±187.5 µrad (0.375 mrad)</strong>: in pure
+rotation all 9 brackets slide synchronously by R·Δθ = ±1.5 mm and bind together. At ×1500
+this is ±16°, very visible.</p>
 
 <figure>
   <img src="animations/rattle_rotation.gif" alt="Rotation mode animation">
-  <figcaption>Pure rotation mode — range <strong>±187.5 µrad = 0.375 mrad</strong> ·
-  all 9 brackets move synchronously · ×500 magnification (spoke 0 sweeps ±5.37°)</figcaption>
+  <figcaption>Pure rotation — centre fixed on axis · range ±187.5 µrad · all 9 pins
+  slide synchronously.</figcaption>
 </figure>
 
 <div class="callout info">
-<strong>Rotation does not drive the heat-load concern.</strong> Rotating an axisymmetric torus
-about its own axis leaves the plasma–wall gap unchanged (n = 0). The ±187.5 µrad rotation
-shifts discrete first-wall features (tiles, ports) toroidally by ±1.5 mm at R = 8 m — a
-<em>local mechanical alignment</em> consideration for ports and penetrations, not an n=1
-plasma-facing issue. It must therefore <em>not</em> be added to the 3.09 mm n=1 number; it is a
-distinct, independent mode. During the translation optimum rotation contributes only 5.83 µrad
-(0.047 mm) and is invisible.</div>
+<strong>Rotation does not drive the n = 1 heat-load concern.</strong> Rotating an axisymmetric
+torus about its own axis leaves the plasma–wall gap unchanged (n = 0). The ±187.5 µrad mode
+shifts discrete features (tiles, ports) by ±1.5 mm at R = 8 m — a local-alignment
+consideration for ports/penetrations, not part of the n = 1 budget. The translation LP
+optimum uses only 5.83 µrad of rotation (invisible).</div>
 
 <!-- ═══════════════════════════════════════════════════════════ §10 -->
-<h2 id="s10">§10 — Recommendations</h2>
+<h2 id="s10">§10 — EM Implications</h2>
+
+<p>The lateral rattle is exercised by two distinct EM load cases. Both are now framed against
+the centering force and the kinematic departure ceiling.</p>
+
+<h3>§10.1 — Plasma current ramp (start-up)</h3>
+
+<p>The plasma is ramped from 0 to <strong>~3 MA over ~10 s</strong>. dI<sub>p</sub>/dt drives
+image currents in the vessel; these currents in the presence of n ≤ 4 toroidal-field
+asymmetries (mainly from <strong>TF vault closure tolerances</strong>) produce a lateral
+n = 1 force on the vessel.</p>
+
+<div class="callout warn">
+<strong>Force estimate (order of magnitude):</strong> with vessel image current of
+O(10⁵ A) during the ramp, B<sub>T</sub> ≈ 5 T, n = 1 field error ε ~ 10⁻⁴–10⁻³, and a vessel
+toroidal length scale ~ 2πR, the lateral force is
+F<sub>ramp</sub> ~ ε · I<sub>vv</sub> · B<sub>T</sub> · L ~
+<strong>1–10 kN</strong> — i.e. <em>comparable to</em> the F<sub>stop</sub> ≈ 4.5 kN
+centering threshold. Detailed EM analysis is required for a defensible number.</div>
+
+<div class="callout warn">
+<strong>Timescales — the ramp drives the vessel near its natural period.</strong> The 10 s
+current ramp ≈ the 10 s pendulum period (T<sub>n</sub>). Quasi-static deflection
+x<sub>qs</sub> = F<sub>ramp</sub>/K = 0.3–3 mm; with τ/T<sub>n</sub> ≈ 1 the dynamic
+amplification factor for a single ramp is ~1.3–1.5 (it is <em>not</em> resonant
+accumulation — that requires periodic forcing — but it is enough to overshoot the static
+solution by ~50%). The estimated peak start-up departure is therefore
+<strong>O(1–4 mm)</strong> — potentially comparable to the ±1.5 mm gap. Whether the vessel
+reaches the dowel stops during a normal current ramp depends sensitively on the actual
+n = 1 force amplitude and on damping; this should be confirmed with the EM transient model.</div>
+
+<h3>§10.2 — Disruption / VDE</h3>
+
+<p>A current-quench EM impulse delivers a MN-scale lateral force over milliseconds, far
+faster than the 10 s vessel period and far larger than the kN-scale centering. On the
+disruption timescale the vessel responds essentially as a <em>free mass</em>:</p>
+
+<pre>impulse  J = ∫F dt   ~  (10 MN) · (10 ms)        ≈  10⁵ N·s
+velocity v = J / M  ~  10⁵ / 8×10⁶ kg            ≈  12  mm/s
+amplitude (free)  A = v / ω  ~  v · T<sub>n</sub> / 2π   ≈  20  mm     (≫ 1.5 mm gap!)</pre>
+
+<div class="callout key">
+<strong>The vessel hits the dowel stops with O(10 mm/s) closing velocity, carrying
+O(500 J) of kinetic energy.</strong> Peak force at impact depends on the stop's elastic
+compliance: for a relatively rigid stop (K<sub>stop</sub> ~ GN/m), F<sub>peak</sub> = √(2 K E)
+is on the order of <strong>~1 MN</strong>. This is an <strong>impulsive lateral load on the
+VVGS</strong> — distinct from steady-state gravity loading and potentially a
+<strong>bounding load case for VVGS lateral design</strong>. The soft centering provides no
+material deceleration before impact. Dynamic amplification through the linkage
+should be assessed.</div>
+
+<h3>§10.3 — The 6 mm n ≤ 4 budget</h3>
+
+<p>The start-up heat-load criterion compares the <em>filtered (n ≤ 4)</em> first-wall and
+toroidal-field profiles: their peak-to-peak difference must remain within
+<strong>6 mm</strong>. The vessel's n = 1 contribution to the first-wall side of this
+inequality is precisely the departure-from-centre quantified above:</p>
+
+<table>
+<tr><th>Operating condition</th><th>VV n = 1 contribution to the 6 mm budget</th></tr>
+<tr><td>Quiescent / between shots (no lateral load)</td><td class="num">≈ 0 mm (self-centred)</td></tr>
+<tr><td>Steady asymmetric thermal/EM (force ≪ F<sub>stop</sub>)</td><td class="num">F/K — sub-mm</td></tr>
+<tr><td>Start-up ramp (mid-range estimate)</td><td class="num">~ 1–4 mm (force-dependent)</td></tr>
+<tr><td>Disruption transient (impulsive)</td><td class="num">up to gap (1.5 mm) + dynamic overshoot</td></tr>
+<tr><td>Kinematic ceiling (worst assembly, fully forced)</td><td class="num">~ 2.98 mm (MC max)</td></tr>
+</table>
+
+<div class="callout info">
+<strong>Budget allocation.</strong> The remaining ~3–5 mm of the 6 mm n ≤ 4 budget must
+cover the toroidal-field side (TF vault closure n ≤ 4 fluctuations) and any other first-wall
+n ≤ 4 sources. The vessel n = 1 contribution is favourable in quiescent operation
+(self-centring) but the start-up ramp drives the vessel close to its natural period and
+needs a defensible force estimate.</div>
+
+<!-- ═══════════════════════════════════════════════════════════ §11 -->
+<h2 id="s11">§11 — Recommendations</h2>
 
 <table>
 <tr><th>#</th><th>Recommendation</th><th>Status</th></tr>
-<tr><td>1</td><td>Use <strong>3.09 mm peak-to-peak</strong> as the bounding n=1 lateral wall displacement (nominal/centred assembly — the team's target and the theoretical ceiling)</td><td><span class="badge ok-b">CONFIRMED</span></td></tr>
-<tr><td>2</td><td>Do <em>not</em> rely on the MC P95 (3.01 mm) as a relaxation — it is only ~3% below the ceiling and the realistic assembly is centred (worst case)</td><td><span class="badge warn-b">CAUTION</span></td></tr>
-<tr><td>3</td><td>Assess <strong>start-up heat-load localisation on the inner-wall limiter</strong> (n=1) for a wall offset up to ≈ 2.9 mm single-sided, and shot-to-shot variation up to 3.09 mm</td><td><span class="badge bad-b">ACTION REQUIRED</span></td></tr>
-<tr><td>4</td><td>Assess the <strong>dynamic impact loads on the gravity supports</strong> from EM-driven motion across the ±1.5 mm gap (disruptions/VDEs/halo currents), and the <strong>fatigue</strong> from repeated impact cycling over machine life</td><td><span class="badge bad-b">ACTION REQUIRED</span></td></tr>
-<tr><td>5</td><td>The bound is set by the <strong>3 mm toroidal slot</strong> and is largely irreducible by assembly control; reducing the lateral rattle means reducing the slot/tolerance or adding toroidal restraint</td><td><span class="badge warn-b">DESIGN LEVER</span></td></tr>
-<tr><td>6</td><td>Gap metrology gives little benefit until ≥ 5 sectors are measured; with one sector landed the bound is unchanged. Confirm whether "landed" implies a measured gap</td><td><span class="badge warn-b">RECOMMENDED</span></td></tr>
-<tr><td>7</td><td>Toroidal slot allowance <strong>±1.5 mm (3 mm total)</strong> confirmed against the GS design (2026-05-27); all numbers scale linearly with the slot</td><td><span class="badge ok-b">CONFIRMED</span></td></tr>
-<tr><td>8</td><td>Treat the ±187.5 µrad rotation (n=0) as a separate local-alignment case for ports/penetrations, not part of the n=1 budget</td><td><span class="badge warn-b">NOTED</span></td></tr>
+<tr><td>1</td><td>Use <strong>departure from gravitational centre</strong> as the metric for the n = 1 first-wall contribution; the LP kinematic ceiling is <strong>2.98 mm</strong> (MC max) and <strong>P95 = 2.27 mm</strong></td><td><span class="badge ok-b">CONFIRMED</span></td></tr>
+<tr><td>2</td><td>Compute the <strong>start-up n = 1 lateral force on the vessel</strong> (3 MA / 10 s ramp through the actual n ≤ 4 TF vault closure errors) and the resulting dynamic peak departure (τ/T<sub>n</sub> ≈ 1, single ramp). Confirm O(1–4 mm) estimate</td><td><span class="badge bad-b">ACTION REQUIRED</span></td></tr>
+<tr><td>3</td><td>Confirm the <strong>6 mm n ≤ 4 budget allocation</strong> between vessel n = 1 and TF-side n ≤ 4 — start-up is the worst quasi-static operating condition</td><td><span class="badge bad-b">ACTION REQUIRED</span></td></tr>
+<tr><td>4</td><td><strong>Disruption dynamic VVGS load case</strong>: model the impulse → vessel velocity → end-stop impact, with peak lateral force on the VVGS — could be bounding for the VVGS lateral capacity</td><td><span class="badge bad-b">ACTION REQUIRED</span></td></tr>
+<tr><td>5</td><td>Gap metrology <em>now meaningfully tightens</em> the n = 1 budget under the departure metric — each landed sector incrementally pulls the polytope toward the gravitational centre. Report the conditional P95 with every additional sector measured</td><td><span class="badge ok-b">UPGRADED</span></td></tr>
+<tr><td>6</td><td>Refine L<sub>eff</sub> (and hence K, T<sub>n</sub>) using the as-built hinge geometry — L<sub>eff</sub> is sensitive to ~2 m per degree of inclination</td><td><span class="badge warn-b">RECOMMENDED</span></td></tr>
+<tr><td>7</td><td>Treat the ±187.5 µrad rotation (n = 0) as a separate local-alignment case for ports/penetrations, not part of the n = 1 budget</td><td><span class="badge warn-b">NOTED</span></td></tr>
 </table>
 
 <hr style="margin-top:3em;border-color:#ddd">
 <p style="font-size:.85em;color:#777">
 Monte Carlo generated reproducibly by <code>vv_mc_generator.py</code> (scipy HiGHS LP,
-peak-to-peak range metric, N = 5000, fixed seed 20260527 → committed data in
+departure-from-centre metric, N = 5000, fixed seed 20260527 → committed data in
 <code>data/</code>). Figures and animations by <code>vv_viz.py</code>; all displacements
-magnified ×500 in diagrams. Every number in this report regenerates from the repository.
+magnified ×1500 in diagrams. Centering-force parameters use M ≈ 8000 t, 15° inclined dual
+hinge → L<sub>eff</sub> ≈ 26 m → K ≈ 3 kN/mm, T<sub>n</sub> ≈ 10 s, F<sub>stop</sub> ≈
+4.5 kN. Every number regenerates from the repository.
 Source: <code>Simon-McIntosh/vv</code>.
 </p>
 </body>

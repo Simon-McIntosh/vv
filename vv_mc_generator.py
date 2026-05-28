@@ -35,19 +35,21 @@ from __future__ import annotations
 import os
 import numpy as np
 
-from vv_viz import max_rattle_mm, N, DELTA_M
+from vv_viz import max_departure_mm, max_rattle_mm, N, DELTA_M
 
 N_SAMPLES = 5000
 SEED = 20260527          # fixed -> reproducible
-N_DIR = 72               # direction sweep for the range metric (converged)
+N_DIR = 72               # direction sweep (converged)
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 
 
 def generate(n_samples: int = N_SAMPLES, seed: int = SEED, nd: int = N_DIR):
-    """Sample assembly offsets and compute the peak-to-peak rattle range (mm)."""
+    """Sample assembly offsets and compute max one-sided departure from the
+    gravitational centre (mm) — the metric for forced excursion from the
+    self-centred rest position under the inclined-hinge centring model."""
     rng = np.random.default_rng(seed)
     u = rng.uniform(-DELTA_M, DELTA_M, size=(n_samples, N))
-    rattles = np.array([max_rattle_mm(u[k], nd=nd) for k in range(n_samples)])
+    rattles = np.array([max_departure_mm(u[k], nd=nd) for k in range(n_samples)])
     return rattles, u
 
 
@@ -57,13 +59,15 @@ def main():
     np.save(os.path.join(DATA_DIR, "rattle_mc_5k.npy"), rattles)
     np.save(os.path.join(DATA_DIR, "u_mc_5k.npy"), u)
 
-    nominal = max_rattle_mm(np.zeros(N), nd=N_DIR)
-    print(f"N={N_SAMPLES}  seed={SEED}  nd={N_DIR}  metric=peak-to-peak range (mm)")
+    nominal = max_departure_mm(np.zeros(N), nd=N_DIR)
+    print(f"N={N_SAMPLES}  seed={SEED}  nd={N_DIR}  metric=max departure from centre (mm)")
     for p in (50, 75, 90, 95, 99):
         print(f"  P{p:<2} = {np.percentile(rattles, p):.4f} mm")
     print(f"  mode ~= {_mode(rattles):.4f} mm")
     print(f"  max  = {rattles.max():.4f} mm")
-    print(f"  nominal (u=0) = {nominal:.4f} mm   (hard theoretical ceiling)")
+    print(f"  nominal (u=0)        = {nominal:.4f} mm   (symmetric/centred envelope half-width)")
+    range_nom = max_rattle_mm(np.zeros(N), nd=N_DIR)
+    print(f"  nominal pk-pk range  = {range_nom:.4f} mm   (peak-to-peak envelope, secondary)")
     print(f"  -> wrote {DATA_DIR}/rattle_mc_5k.npy, u_mc_5k.npy")
 
 
