@@ -160,195 +160,214 @@ def main():
 
     # title
     t = doc.add_paragraph()
-    tr = t.add_run("ITER Vacuum Vessel — Lateral Rattle Analysis")
+    tr = t.add_run("ITER Vacuum Vessel — Lateral Displacement Analysis")
     tr.bold = True; tr.font.size = Pt(19); tr.font.color.rgb = DARKBLUE
     pPr = t._p.get_or_add_pPr(); pbdr = OxmlElement("w:pBdr")
     b = OxmlElement("w:bottom"); b.set(qn("w:val"), "single"); b.set(qn("w:sz"), "18")
     b.set(qn("w:space"), "3"); b.set(qn("w:color"), "2b5797"); pbdr.append(b); pPr.append(pbdr)
+    # author line
+    auth = doc.add_paragraph()
+    ar = auth.add_run("Simon McIntosh"); ar.bold = True; ar.font.size = Pt(11); ar.font.color.rgb = DARKBLUE
+    ar2 = auth.add_run("   ·   2026-05-28"); ar2.font.size = Pt(10); ar2.font.color.rgb = GREY
     sub = doc.add_paragraph()
-    sr = sub.add_run("Revised 2026-05-28  ·  5,000-sample Monte Carlo  ·  scipy HiGHS LP  ·  "
-                     "metric: max departure from gravitational centre (n=1 first-wall shift)")
+    sr = sub.add_run("5,000-sample Monte Carlo  ·  scipy HiGHS LP  ·  3-DOF rigid-body model  ·  "
+                     "metric: max lateral displacement of the VV centre from the gravitational "
+                     "centre (n = 1 first-wall shift)")
     sr.font.size = Pt(8.5); sr.font.color.rgb = GREY
 
     callout(doc, "key", [
-        ("The VV rests on 9 ", False), ("inward-inclined dual-hinge gravity supports", True),
-        (" that act as a gravitational pendulum well in the lateral DOF — the vessel "
-         "self-centres at rest. The relevant rattle metric is therefore the ", False),
-        ("maximum forced departure from the gravitational centre", True),
-        (f". With the toroidal slot at ±1.5 mm (confirmed), nominal envelope = 1.547 mm; MC "
-         f"over independent assembly offsets gives P95 = {p95:.2f} mm, P99 = {p99:.2f} mm, "
-         f"median {p50:.2f} mm, mode ≈ {mode:.2f} mm, max ≈ {rmax:.2f} mm. Two EM cases drive "
-         "forced departure: (a) the 0→3 MA, 10 s start-up ramp (lateral force comparable to "
-         "the centering, near-resonant with the ~10 s natural period — peak excursions "
-         "O(1 mm)); and (b) disruptions (MN-scale impulse → vessel velocity → impact at the "
-         "dowel stops — potentially a bounding VVGS lateral load case).", False),
-    ], title="Key result:")
+        ("The VV is supported by 9 inward-inclined dual-hinge gravity supports; the 15° "
+         "inclination provides a gravitational centring force, so the vessel self-centres at "
+         "rest. The n = 1 first-wall metric is the ", False),
+        ("max lateral displacement of the VV centre from the gravitational centre", True),
+        (f". Nominal kinematic envelope = 1.55 mm; over 5000 iid Uniform(±1.5 mm) assemblies, "
+         f"P95 = {p95:.2f} mm, P99 = {p99:.2f} mm, max = {rmax:.2f} mm; quiescent contribution "
+         "= 0. Start-up (0→3 MA / 10 s) is favourable: passive vessel currents pull the wall "
+         "TOWARD the offset toroidal-field magnetic centre and CLOSE the n = 1 mismatch. "
+         "Disruption is the bounding VVGS lateral load case (~12 mm/s impact, ~1 MN peak).",
+         False),
+    ], title="Summary of findings:")
 
-    callout(doc, "ok", [
-        ("toroidal slot allowance ", False), ("±1.5 mm (3 mm total)", True),
-        (", confirmed against the GS design. All numbers below use this value; they scale "
-         "linearly with the slot.", False),
-    ], title="Slot allowance — confirmed:")
-
-    heading2(doc, "1 — Physical mechanism: the inclined-hinge VVGS")
+    heading2(doc, "1 — Problem & assumptions")
     body(doc, [
-        ("Each of the 9 gravity supports is a ", False),
-        ("dual-hinge mechanism inclined at 15° from vertical", True),
-        (", leaning inward. The dual hinges permit radial motion (thermal expansion via "
-         "dowel rotation) while the dowels' rigidity restrains toroidal motion to the "
-         "±1.5 mm slot. The inward inclination is deliberate: it puts the supports' "
-         "common convergence point above the vessel CoG, so the vessel behaves as an "
-         "inclined-hinge ", False),
-        ("gravitational pendulum", True),
-        (" — the radial/lateral DOF sits in a parabolic potential well centred on the "
-         "nominal position.", False),
+        ("9 VVGS, equally spaced toroidally on a ring R_s ≈ 8 m. Each is a dual-hinge mechanism "
+         "inclined 15° from vertical (leaning inward). Radial motion is permitted by dowel "
+         "rotation (thermal expansion); toroidal motion is restrained to a ±1.5 mm slot. The "
+         "supported mass is M ≈ 8000 t (VV + in-vessel components). The slot allowance "
+         "±1.5 mm (3 mm total) is confirmed against the GS design.", False),
     ])
-    table(doc, ["Quantity", "Value", "Notes"], [
-        ["Effective pendulum length L_eff", "≈ 26 m", "= R_s / tan(15°) − z_CoG ; sensitive to angle (~2 m / °)"],
-        ["Lateral stiffness K = W / L_eff", "≈ 3.0 kN / mm", "with M ≈ 8000 t (VV + in-vessel)"],
-        ["Natural period T_n", "≈ 10 s (f ≈ 0.1 Hz)", "depends on L_eff only, not on M"],
-        ["Force to reach the ±1.5 mm stop", "≈ 4.5 kN", "≈ 6×10⁻⁵ of the 78 MN weight"],
-        ["Rest position (no lateral force)", "q* = 0 (centred)", "gravitational PE minimum"],
+    callout(doc, "warn", [
+        ("The ±1.5 mm slot is an ", False), ("assembly tolerance", True),
+        (": the as-built precision with which each VVGS pin lands in its dowel. If the gaps "
+         "are left unshimmed (the case treated here), it is this tolerance that permits the "
+         "vessel to be laterally mobile and is what drives this analysis. We model the as-built "
+         "state by the conservative prior that each u_i is independent and uniformly "
+         "distributed on [−1.5, +1.5] mm. Shimming a support pins its u_i to a measured value "
+         "and removes that support's contribution to the mobility (see §6).", False),
+    ], title="Assembly assumption — the source of mobility:")
+    body(doc, [
+        ("The inward 15° inclination puts the support axes' convergence point above the vessel "
+         "CoG; for the lateral mode the vessel behaves as an ", False),
+        ("inclined-hinge gravitational pendulum", True),
+        (" — the lateral plane has a parabolic potential well centred on the nominal position.",
+         False),
+    ])
+    table(doc, ["Quantity", "Value"], [
+        ["Effective pendulum length L_eff", "≈ 26 m (sensitive to angle; ~2 m / °)"],
+        ["Lateral centring stiffness K = W / L_eff", "≈ 3.0 kN / mm"],
+        ["Natural period T_n", "≈ 10 s (f ≈ 0.1 Hz)"],
+        ["Force to reach a ±1.5 mm stop", "≈ 4.5 kN"],
+        ["Rest position (no lateral force)", "q* = 0 (gravitational PE minimum)"],
     ])
 
-    heading2(doc, "2 — How the centering force reframes the analysis")
-    callout(doc, "info", [
-        ("At rest the vessel self-centres to q = 0 regardless of the toroidal assembly offsets — "
-         "the pins simply sit at u_i in their ±1.5 mm slots while the vessel is centred. The "
-         "relevant metric is no longer the peak-to-peak range but the ", False),
-        ("max one-sided departure from the gravitational centre", True),
-        (" under sufficient lateral force; this is bounded by the kinematic polytope.", False),
-    ], title="Self-centred rest position:")
-
-    heading2(doc, "3 — The number: max departure from centre (MC)")
-    table(doc, ["Statistic", "Departure (mm)", "Notes"], [
-        ["Nominal (u = 0)", "1.547", "Symmetric envelope half-width"],
-        ["Mode", f"{mode:.2f}", "Most probable as-built value"],
-        ["Median (P50)", f"{p50:.2f}", "Typical random assembly"],
-        ["P95", f"{p95:.2f}", "95th percentile"],
-        ["P99", f"{p99:.2f}", ""],
-        ["Max observed", f"{rmax:.2f}", "Kinematic ceiling on forced departure"],
+    heading2(doc, "2 — Constraint model")
+    body(doc, [
+        ("Toroidal slide at support i: δ_i = −sin(φ_i)·Δx + cos(φ_i)·Δy + R·Δθ, with |u_i + "
+         "δ_i| ≤ 1.5 mm. The 9×3 constraint matrix has AᵀA = diag(4.5, 4.5, 576): the three "
+         "rigid-body DOFs are mutually uncorrelated. The reachable (Δx, Δy) set is the "
+         "displacement polytope; the metric is the maximum lateral displacement of the VV "
+         "centre from the gravitational centre.", False),
     ])
-    figure(doc, os.path.join(DOCS, "plots", "mc_dashboard.png"),
-           "Departure-from-centre distribution and CDF. Nominal (u=0) gives the symmetric "
-           "envelope; offset assemblies reach further from the gravitational centre.")
-    callout(doc, "info", [
-        ("Quiescent (no significant lateral load) the vessel sits at the gravitational centre — "
-         "n = 1 wall contribution ≈ 0. Under forced load the vessel departs from centre up to "
-         "the polytope boundary — the MC bounds that kinematic ceiling.", False)],
-        title="This is the n = 1 wall budget input:")
 
-    heading2(doc, "4 — Forced excursion: worst &amp; typical assembly")
-    body(doc, [("The animations show the VV rocked through its polytope along the principal "
-                "axis — the kinematic envelope of possible forced motion about the centre. "
-                "At rest the vessel sits at the mid-frame (q = 0); under sufficient lateral "
-                "force it can be driven to the extremes. ×1500 magnification.", False)])
-    callout(doc, "info", [
-        ("Each grey toroidal slot stays at constant radial distance from the wall — the "
-         "four-bar linkage moves radially with the vessel. The coloured pin shows the "
-         "toroidal-constraint usage (blue = slack, orange = near limit, red = at stop).", False)],
-        title="Reading the supports:")
+    heading2(doc, "3 — State diagrams")
+    figure(doc, os.path.join(DOCS, "plots", "vv_states.png"),
+           "The VV sits at the gravitational centre in both panels (rest position). The shaded "
+           "polygon around the centre is the displacement polytope — the kinematic envelope of "
+           "possible lateral displacements under applied force. Left: nominal assembly "
+           "(envelope half-width 1.55 mm). Right: worst observed MC sample — the offsets shift "
+           "the polytope so the far corner lies up to 2.98 mm from the centre. ×750 magnification.")
+
+    heading2(doc, "4 — Forced-excursion envelope")
+    body(doc, [
+        ("The animations sweep the VV centre through the polytope along its principal axis — "
+         "the kinematic envelope of lateral motion about the centred rest position. With no "
+         "applied force the vessel sits at the centre; sufficient applied force drives it "
+         "through the envelope. ×750 magnification.", False),
+    ])
     figure(doc, os.path.join(DOCS, "animations", "rattle_worst_case.gif"),
-           f"Worst MC sample — max departure ≈ {rmax:.2f} mm (polytope diameter ≈ 3.09 mm). [GIF first frame]",
+           f"Worst observed MC sample — max forced departure ≈ {rmax:.2f} mm. [GIF first frame]",
            width=3.6)
     figure(doc, os.path.join(DOCS, "strips", "strip_worst_translation.png"),
-           "Worst-case key frames (×1500 magnification).")
+           "Worst-case key frames.")
     figure(doc, os.path.join(DOCS, "animations", "rattle_mode.gif"),
-           f"Typical as-built assembly (near the distribution mode) — max departure ≈ "
-           f"{mode:.2f} mm (the most likely value). [GIF first frame]",
-           width=3.6)
+           f"Typical as-built assembly (near the distribution mode) — max forced departure ≈ "
+           f"{mode:.2f} mm. [GIF first frame]", width=3.6)
     figure(doc, os.path.join(DOCS, "strips", "strip_mode_translation.png"),
-           "Near-mode (typical assembly) key frames (×1500 magnification).")
+           "Near-mode (typical) key frames.")
 
-    heading2(doc, "5 — Effect of gap measurements (now much more powerful)")
-    body(doc, [("Important reversal from the previous diameter framing: the polytope diameter "
-                "is set by the 3 mm slot and is essentially insensitive to the assembly "
-                "offsets, but the ", False), ("departure from centre", True),
-               (" is governed by how far the polytope is offset from q = 0 — exactly what the "
-                "u_i set — so each measured gap directly tightens the conditional departure "
-                "distribution. AᵀA is exactly diagonal so adjacency is irrelevant; only the ",
-                False), ("number", True), (" of measurements matters.", False)])
-    table(doc, ["Supports measured (k of 9)", "P95 — centred (mm)",
-                "P95 — typical (mm)", "Effect"], [
-        ["0 (none)", f"{p95:.2f}", f"{p95:.2f}", "baseline"],
-        ["1  (one sector landed)", "≈ 2.2", "≈ 2.2", "small but real tightening"],
-        ["3", "≈ 2.0", "≈ 2.1", "moderate"],
-        ["5", "≈ 1.8", "≈ 2.0", "substantial"],
-        ["9 (all)", "→ 1.55 (nominal env.)", "deterministic", "collapsed"],
+    heading2(doc, "5 — Monte Carlo distribution")
+    table(doc, ["Statistic", "Max lateral displacement (mm)"], [
+        ["Nominal (u = 0) — symmetric envelope half-width", "1.55"],
+        ["Mode", f"{mode:.2f}"],
+        ["Median (P50)", f"{p50:.2f}"],
+        ["P95", f"{p95:.2f}"],
+        ["P99", f"{p99:.2f}"],
+        ["Max observed (n = 5000)", f"{rmax:.2f}"],
+    ])
+    figure(doc, os.path.join(DOCS, "plots", "mc_dashboard.png"),
+           "Distribution (left) and CDF (right) of the maximum lateral displacement of the "
+           "VV centre from the gravitational centre, over 5000 independent Uniform(±1.5 mm) "
+           "assemblies. Nominal (centred-assembly) gives the symmetric envelope; offset "
+           "assemblies reach further from the centre.")
+
+    heading2(doc, "6 — Effect of gap measurements")
+    body(doc, [
+        ("Each measured gap fixes one u_i and pulls the polytope toward the gravitational "
+         "centre: under this metric measurement directly tightens the conditional displacement "
+         "bound. AᵀA is exactly diagonal so adjacency is irrelevant; only the ", False),
+        ("number", True),
+        (" of measured sectors matters. With all 9 measured and found near-centred, the "
+         "conditional bound collapses to the 1.55 mm nominal envelope.", False),
+    ])
+    table(doc, ["Measured sectors (k of 9)", "P95 — centred (mm)", "P95 — typical (mm)"], [
+        ["0 (baseline)", f"{p95:.2f}", f"{p95:.2f}"],
+        ["1", "≈ 2.26", "≈ 2.26"],
+        ["3", "≈ 2.19", "≈ 2.22"],
+        ["5", "≈ 2.05", "≈ 2.00"],
+        ["9 (all)", "→ 1.55 (nominal env.)", "deterministic"],
     ])
     figure(doc, os.path.join(DOCS, "plots", "partial_measurement.png"),
-           "Left: the departure distribution. Right: conditional P95 vs supports measured "
-           "(centred vs typical random).")
-    callout(doc, "key", [
-        ("Each additional measured sector incrementally tightens the n = 1 budget — a clear "
-         "path to bound reduction as landing progresses. This contrasts with the previous "
-         "peak-to-peak diameter framing, which gave no relief from measurements.", False)],
-        title="Each landed sector matters:")
+           "Left: the displacement distribution. Right: conditional P95 vs number of sectors "
+           "measured, for two scenarios of the measured values (centred / typical random).")
 
-    heading2(doc, "6 — Rotation (n = 0, separate)")
+    heading2(doc, "7 — Start-up lateral loads: passive self-alignment")
     body(doc, [
-        ("The LP for max Δθ gives ", False),
-        ("±187.5 µrad (0.375 mrad)", True),
-        (" — all 9 pins slide synchronously by R·Δθ = ±1.5 mm. Rotating an axisymmetric "
-         "torus about its own axis leaves the plasma–wall gap unchanged (", False),
-        ("n = 0", True),
-        ("), so this mode is local-alignment only and not part of the n = 1 budget.", False),
+        ("During the 0 → ~3 MA, ~10 s plasma current ramp, the dI_p/dt induces image currents "
+         "in the vessel. These currents interact with the n ≤ 4 toroidal-field asymmetry "
+         "produced by TF vault closure tolerances to produce a lateral n = 1 force on the "
+         "vessel.", False),
     ])
-
-    heading2(doc, "7 — EM implications")
-    callout(doc, "warn", [
-        ("Plasma ramps 0→3 MA over ~10 s, driving vessel image currents that, with n ≤ 4 TF "
-         "asymmetries (mainly TF vault closure), produce a lateral n = 1 force estimated at "
-         "O(1–10 kN) — comparable to the F_stop ≈ 4.5 kN centering. The 10 s ramp ≈ T_n, so "
-         "the dynamic response factor is ~1.3–1.5 (a single ramp, not periodic — no resonant "
-         "accumulation). Quasi-static deflection F/K = 0.3–3 mm; dynamic peak departure ", False),
-        ("O(1–4 mm)", True), (" — potentially close to the ±1.5 mm gap. A defensible value "
-         "needs the actual n ≤ 4 force amplitude and damping.", False)],
-        title="(a) Start-up plasma ramp (10 s):")
     callout(doc, "key", [
-        ("A current quench delivers MN-scale lateral force over ms — far faster than T_n ≈ 10 s "
-         "and far larger than the kN centering. On the disruption timescale the vessel responds "
-         "as a free mass: impulse J = F·τ ~ 10⁵ N·s → v = J/M ~ 12 mm/s; the soft centering "
-         "barely decelerates it. The vessel hits the dowel stops at O(10 mm/s) with O(500 J) of "
-         "kinetic energy → peak impact force on the VVGS ~1 MN (rigid-stop estimate). This is "
-         "an ", False),
-        ("impulsive lateral load case for VVGS design", True),
-        (" and could be bounding for the lateral capacity.", False),
-    ], title="(b) Disruption / VDE (ms):")
-    callout(doc, "info", [
-        ("The start-up criterion compares the n ≤ 4 filtered first-wall and toroidal-field "
-         "profiles; their peak-to-peak difference must remain within ", False),
-        ("6 mm", True), (". The vessel n = 1 contribution is ≈ 0 quiescent (self-centred), "
-         "~1–4 mm at the start-up peak (force-dependent), and up to the ~2.9 mm kinematic "
-         "ceiling under disruption-class lateral forces. The remaining ~3–5 mm must cover the "
-         "TF vault closure n ≤ 4 and any other first-wall n ≤ 4 sources.", False)],
-        title="The 6 mm n ≤ 4 budget:")
-
-    heading2(doc, "8 — Recommendations")
-    table(doc, ["#", "Recommendation"], [
-        ["1", "Use departure from gravitational centre as the n = 1 first-wall metric; "
-              f"P95 = {p95:.2f} mm, MC max ≈ {rmax:.2f} mm. Quiescent contribution ≈ 0."],
-        ["2", "Compute the start-up lateral force on the vessel from a 3 MA / 10 s ramp through "
-              "the actual TF vault closure n ≤ 4 errors; expect O(1–4 mm) dynamic peak departure."],
-        ["3", "Allocate the 6 mm n ≤ 4 budget between vessel n = 1 (above) and TF-side n ≤ 4."],
-        ["4", "Disruption dynamic VVGS load case: model impulse → vessel velocity → end-stop "
-              "impact (~MN peak lateral force). Potentially bounding for the VVGS."],
-        ["5", "Gap metrology NOW meaningfully tightens the n = 1 budget under the departure "
-              "metric — each landed sector incrementally pulls the polytope toward the "
-              "gravitational centre. Report conditional P95 with every additional sector measured."],
-        ["6", "Refine L_eff using the as-built hinge geometry — sensitive to ~2 m/° of "
-              "inclination angle."],
-        ["7", "Slot allowance ±1.5 mm (3 mm total) confirmed; linear scaling with the slot."],
-        ["8", "Treat the ±187.5 µrad rotation (n = 0) as a separate local-alignment case for "
-              "ports/penetrations."],
+        ("The direction is favourable: the lateral force on the induced vessel current pulls "
+         "the vessel TOWARD the n = 1 magnetic axis of the (offset) toroidal field — passive "
+         "vessel currents act to ", False),
+        ("self-align the wall with the field", True),
+        (". Any vessel motion during the ramp therefore CLOSES the peak-to-peak misalignment "
+         "between the n ≤ 4 filtered first-wall and toroidal-field profiles, rather than "
+         "opening it. The start-up ramp is not a budget-eroding event — it is the opposite.",
+         False),
+    ], title="Start-up displacement direction:")
+    body(doc, [
+        ("Order-of-magnitude force: with vessel image current of O(10⁵ A) during the ramp, "
+         "B_T ≈ 5 T, fractional n = 1 field error ε ~ 10⁻⁴–10⁻³, and a toroidal length scale "
+         "~ 2πR, the lateral force F_ramp ~ ε · I_vv · B_T · L is of order 1–10 kN — comparable "
+         "to the F_stop ≈ 4.5 kN centring threshold. The ramp duration (10 s) is comparable to "
+         "T_n (~10 s), so the single-ramp dynamic response factor is ~1.3–1.5; F/K = 0.3–3 mm "
+         "quasi-static becomes a peak excursion of order 1–4 mm — below the 1.5 mm gap when "
+         "combined with the favourable direction. A defensible value needs the EM transient.",
+         False),
     ])
+
+    heading2(doc, "8 — Disruption loads &amp; VVGS impact case")
+    body(doc, [
+        ("A current quench delivers an MN-scale lateral impulse over ~10 ms — far faster than "
+         "T_n ≈ 10 s and far larger than the kN-scale centring. On this timescale the vessel "
+         "responds as a free mass:", False),
+    ])
+    table(doc, ["Quantity", "Estimate"], [
+        ["Impulse J = ∫F dt", "(10 MN)·(10 ms) ≈ 10⁵ N·s"],
+        ["Velocity v = J / M", "10⁵ / 8×10⁶ kg ≈ 12 mm/s"],
+        ["Free-pendulum amplitude v·T_n / 2π", "≈ 20 mm  (≫ 1.5 mm gap)"],
+    ])
+    callout(doc, "key", [
+        ("The vessel impacts the dowel stops at ~12 mm/s with ~0.5 kJ of kinetic energy. For "
+         "a rigid stop, peak lateral force on the VVGS is of order ", False),
+        ("~1 MN", True),
+        (" — much larger than the steady gravity-related lateral demand. This is an "
+         "impulsive lateral load case for VVGS design, distinct from steady operation, and is "
+         "potentially the bounding load case for VVGS lateral capacity. The soft kN-scale "
+         "centring provides essentially no deceleration before impact.", False),
+    ], title="VVGS impulsive lateral load:")
+
+    heading2(doc, "9 — The 6 mm n ≤ 4 first-wall budget")
+    body(doc, [
+        ("The start-up heat-load criterion limits the peak-to-peak difference between the "
+         "n ≤ 4 filtered first-wall and toroidal-field profiles to ≤ 6 mm. The VV n = 1 "
+         "contribution to the first-wall side is the lateral displacement quantified above.",
+         False),
+    ])
+    table(doc, ["Operating condition", "VV n = 1 contribution"], [
+        ["Quiescent / between shots (no lateral load)", "≈ 0 mm (self-centred)"],
+        ["Start-up ramp (passive currents → wall follows TF)", "net REDUCES mismatch"],
+        ["Steady asymmetric thermal/EM loads", "F/K — sub-mm"],
+        ["Disruption transient (forced)", "up to gap (1.5 mm) + overshoot"],
+        ["Kinematic ceiling (worst random assembly)", f"≈ {rmax:.2f} mm"],
+    ])
+    callout(doc, "info", [
+        ("Under nominal start-up conditions the VV n = 1 contribution is small AND favourable "
+         "(it closes the misalignment). The remaining 3–6 mm of the budget is available for the "
+         "toroidal-field side (mainly TF vault closure n ≤ 4) and any other first-wall n ≤ 4 "
+         "contributors.", False),
+    ], title="Budget allocation:")
 
     foot = doc.add_paragraph()
-    fr = foot.add_run("Monte Carlo generated reproducibly by vv_mc_generator.py "
-                      "(scipy HiGHS LP, departure-from-centre metric, N = 5000, fixed seed "
-                      "20260527 → committed data/). Centering parameters M ≈ 8000 t, 15° "
-                      "incline → L_eff ≈ 26 m → K ≈ 3 kN/mm, T_n ≈ 10 s, F_stop ≈ 4.5 kN. "
-                      "Every number regenerates from the repository. Source: Simon-McIntosh/vv.")
+    fr = foot.add_run("Author: Simon McIntosh. Monte Carlo data generated reproducibly by "
+                      "vv_mc_generator.py (scipy HiGHS LP, max-lateral-displacement-from-centre "
+                      "metric, N = 5000, fixed seed 20260527 → committed data/). Figures and "
+                      "animations by vv_viz.py; displacements magnified ×750. Centring "
+                      "parameters M ≈ 8000 t, 15° inclined dual hinge → L_eff ≈ 26 m → "
+                      "K ≈ 3 kN/mm, T_n ≈ 10 s, F_stop ≈ 4.5 kN. Every number regenerates from "
+                      "the repository. Source: Simon-McIntosh/vv.")
     fr.font.size = Pt(8); fr.font.color.rgb = GREY
 
     out = os.path.join(DOCS, "vv-rattle-report.docx")

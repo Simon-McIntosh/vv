@@ -47,7 +47,7 @@ from scipy.optimize import linprog
 from scipy.spatial import ConvexHull
 
 # ── geometry ──────────────────────────────────────────────────────────────────
-MAG     = 1500      # displacement magnification for display (polytope-diagnostic)
+MAG     = 750       # displacement magnification for display (polytope-diagnostic)
 N       = 9         # number of supports
 R_M     = 8.0       # VV radius (m)
 R_SLOT  = 8.5       # slot display radius — slightly outside VV (m)
@@ -399,41 +399,38 @@ def make_keyframe_strip(u_m: np.ndarray, outpath: str,
 # ── static figures ─────────────────────────────────────────────────────────────
 
 def figure_three_panel(u_worst: np.ndarray) -> str:
-    """Three-panel figure: nominal | worst-case | alternating. Returns base64 PNG."""
-    fig, axes = plt.subplots(1, 3, figsize=(15, 6), facecolor="white")
-    fig.subplots_adjust(wspace=0.05, left=0.01, right=0.99, top=0.91, bottom=0.07)
+    """Two-panel state figure: nominal assembly | worst MC sample.
 
-    # Panel 1 — nominal assembly (u=0), VV at max +X rattle, with polytope
-    u_nom = np.zeros(9)
+    The VV is drawn at the gravitational centre (q = 0) in both panels; the
+    polytope around the centre is the kinematic envelope of possible forced
+    displacements. Returns base64 PNG."""
+    fig, axes = plt.subplots(1, 2, figsize=(12, 6), facecolor="white")
+    fig.subplots_adjust(wspace=0.05, left=0.01, right=0.99, top=0.91, bottom=0.09)
+
+    # Panel 1 — nominal assembly (u = 0), VV at the centre, polytope around it
+    u_nom = np.zeros(N)
     poly_nom = rattle_polytope_2d(u_nom, nd=120)
-    _, dq_nom = lp_rattle(u_nom, 0.0)
-    plot_vv(axes[0], dq_nom, u_nom, polytope_m=poly_nom)
-    nom_rattle = max_rattle_mm(u_nom)
-    axes[0].set_title(f"Nominal assembly (u = 0)\nRattle = {nom_rattle:.2f} mm  ·  max +X shown",
-                      fontsize=9, color="#333")
+    plot_vv(axes[0], np.zeros(3), u_nom, polytope_m=poly_nom)
+    nom_dep = max_departure_mm(u_nom)
+    axes[0].set_title(f"Nominal assembly (u = 0)\n"
+                      f"Max forced departure = {nom_dep:.2f} mm",
+                      fontsize=9.5, color="#333")
 
-    # Panel 2 — worst MC sample, with polytope
+    # Panel 2 — worst MC sample, VV ALSO drawn at the centre (gravitational rest)
     poly_wc = rattle_polytope_2d(u_worst, nd=120)
-    _, dq_wc = lp_rattle(u_worst, 0.0)
-    rattle_wc = max_rattle_mm(u_worst)
-    plot_vv(axes[1], dq_wc, u_worst, polytope_m=poly_wc)
-    axes[1].set_title(f"Worst MC sample (rattle = {rattle_wc:.2f} mm)\nShown at max rattle position",
-                      fontsize=9, color="#333")
-
-    # Panel 3 — alternating gaps → fully locked
-    u_alt = np.array([DELTA_M if i % 2 == 0 else -DELTA_M for i in range(N)])
-    poly_alt = rattle_polytope_2d(u_alt, nd=120)
-    plot_vv(axes[2], np.zeros(3), u_alt, polytope_m=poly_alt)
-    axes[2].set_title("Alternating ±1.5 mm gaps\nRattle ≈ 0 — fully locked",
-                      fontsize=9, color="#333")
+    dep_wc = max_departure_mm(u_worst)
+    plot_vv(axes[1], np.zeros(3), u_worst, polytope_m=poly_wc)
+    axes[1].set_title(f"Worst MC sample (offset assembly)\n"
+                      f"Max forced departure = {dep_wc:.2f} mm",
+                      fontsize=9.5, color="#333")
 
     legend_els = [
         Line2D([0], [0], color="#d8d8d8", lw=1.5, label="Reference ring"),
-        Line2D([0], [0], color="#1e4d9b", lw=3.0, label=f"Displaced VV ring (×{MAG})"),
+        Line2D([0], [0], color="#1e4d9b", lw=3.0, label=f"VV ring at centre (×{MAG})"),
         Line2D([0], [0], color="#e06000", lw=2.5, label="Spoke 0 (orientation)"),
         Line2D([0], [0], color="#cc2200", lw=2.5, label="Slot limits (±1.5 mm)"),
         mpatches.Patch(facecolor="#2b5797", alpha=0.15, edgecolor="#2b5797",
-                       label="Rattle polytope"),
+                       label="Displacement polytope"),
         Line2D([0], [0], marker="o", color="#1a6ea8", ms=7, ls="none", label="Pin — slack"),
         Line2D([0], [0], marker="o", color="#e07000", ms=7, ls="none", label="Pin — near limit"),
         Line2D([0], [0], marker="o", color="#cc2200", ms=7, ls="none", label="Pin — at limit"),
@@ -465,41 +462,46 @@ def figure_mc_dashboard(rattles_mm: np.ndarray) -> str:
     p95  = float(np.percentile(rattles_mm, 95))
     p99  = float(np.percentile(rattles_mm, 99))
     rmax = float(rattles_mm.max())
-    ax1.axvline(mode, color="#228822", lw=1.5, ls="--", label=f"Mode = {mode:.2f} mm")
-    ax1.axvline(med, color="#1a6ea8", lw=1.5, ls="--", label=f"Median = {med:.2f} mm")
-    ax1.axvline(p95, color="#cc8800", lw=2, ls="--", label=f"P95 = {p95:.2f} mm")
-    ax1.axvline(p99, color="#cc2200", lw=2, ls="--", label=f"P99 = {p99:.2f} mm")
-    ax1.axvline(rmax, color="#660000", lw=1.5, ls=":", label=f"Max = {rmax:.2f} mm")
-    ax1.axvline(nom_dep, color="#888", lw=1.5, ls="-",
-                label=f"Nominal (u=0) = {nom_dep:.2f} mm")
-    ax1.annotate(f"Nominal (centred) gives the {nom_dep:.2f} mm symmetric envelope —\n"
-                 f"offset assemblies reach FURTHER from the gravitational centre\n"
-                 f"(max {rmax:.2f} mm); this is the kinematic ceiling on forced\n"
-                 f"departure from the self-centred rest position.",
-                 xy=(nom_dep, ax1.get_ylim()[1] * 0.45),
-                 xytext=(0.05, ax1.get_ylim()[1] * 0.85),
-                 fontsize=7.0, color="#444", ha="left",
-                 arrowprops=dict(arrowstyle="->", color="#999", lw=1))
+    # Vertical reference lines, labelled DIRECTLY on the plot (no legend)
+    h1_top = ax1.get_ylim()[1]
+    # Cluster A (centred): mode / median / nominal — stagger heights
+    for x, col, name, yf in [(mode,    "#228822", "Mode",    0.93),
+                              (med,     "#1a6ea8", "Median",  0.78),
+                              (nom_dep, "#666666", "Nominal", 0.63)]:
+        ax1.axvline(x, color=col, lw=1.5, ls="--")
+        ax1.text(x, h1_top * yf, f"{name}\n{x:.2f} mm",
+                 ha="center", va="top", fontsize=8, color=col, weight="bold",
+                 bbox=dict(boxstyle="round,pad=0.18", fc="white", ec=col, alpha=0.92, lw=0.8))
+    # Cluster B (tail): P95 / P99 / Max
+    for x, col, name, yf in [(p95,  "#cc8800", "P95",  0.93),
+                              (p99,  "#cc2200", "P99",  0.78),
+                              (rmax, "#660000", "Max",  0.63)]:
+        ax1.axvline(x, color=col, lw=1.8, ls="--")
+        ax1.text(x, h1_top * yf, f"{name}\n{x:.2f} mm",
+                 ha="center", va="top", fontsize=8, color=col, weight="bold",
+                 bbox=dict(boxstyle="round,pad=0.18", fc="white", ec=col, alpha=0.92, lw=0.8))
     ax1.set_xlabel("Max forced departure from gravitational centre (mm)", fontsize=10)
     ax1.set_ylabel(f"Count  (n = {len(rattles_mm):,})", fontsize=10)
-    ax1.set_title("MC: VV departure-from-centre distribution",
+    ax1.set_title("VV departure-from-centre — distribution",
                   fontsize=11, color="#1a3a6e")
-    ax1.legend(fontsize=8.0, frameon=False, loc="upper left")
     ax1.spines[["top", "right"]].set_visible(False)
 
-    # CDF
+    # CDF — direct labels at the percentile crossings (no legend)
     s = np.sort(rattles_mm)
     p = np.linspace(0, 100, len(s))
     ax2.plot(s, p, "-", color="#2b5797", lw=2)
     ax2.fill_betweenx(p, s, alpha=0.12, color="#2b5797")
-    for pct, col in [(50, "#228822"), (75, "#cc8800"), (95, "#cc5500"), (99, "#cc2200")]:
-        v = np.percentile(rattles_mm, pct)
-        ax2.axvline(v, color=col, lw=1.5, ls="--",
-                    label=f"P{pct} = {v:.2f} mm")
+    for pct, col in [(50, "#228822"), (75, "#1a6ea8"),
+                     (95, "#cc8800"), (99, "#cc2200")]:
+        v = float(np.percentile(rattles_mm, pct))
+        ax2.axvline(v, color=col, lw=1.4, ls="--")
+        ax2.axhline(pct, color=col, lw=0.6, ls=":", alpha=0.6)
+        ax2.text(v, pct, f" P{pct}: {v:.2f} mm",
+                 ha="left", va="bottom", fontsize=8.5, color=col, weight="bold",
+                 bbox=dict(boxstyle="round,pad=0.18", fc="white", ec=col, alpha=0.92, lw=0.8))
     ax2.set_xlabel("Max forced departure from centre (mm)", fontsize=10)
     ax2.set_ylabel("Percentile", fontsize=10)
-    ax2.set_title("Departure-from-centre — CDF", fontsize=11, color="#1a3a6e")
-    ax2.legend(fontsize=8.5, frameon=False)
+    ax2.set_title("Cumulative distribution", fontsize=11, color="#1a3a6e")
     ax2.spines[["top", "right"]].set_visible(False)
     ax2.set_ylim(0, 100)
 
@@ -584,8 +586,8 @@ def figure_partial_measurement(rattles_all: np.ndarray, u_ref=None) -> str:
                   arrowprops=dict(arrowstyle="->", color="#888"))
     ax_k.set_xlabel("Number of support gaps measured (k of 9)", fontsize=10)
     ax_k.set_ylabel("Conditional P95 departure from centre (mm)", fontsize=10)
-    ax_k.set_title("Measurement narrows the conditional distribution;\n"
-                   "one sector landed (k=1) gives no meaningful change",
+    ax_k.set_title("Each measured gap pulls the polytope toward the centre —\n"
+                   "the conditional bound tightens with every sector",
                    fontsize=9.5, color="#1a3a6e")
     ax_k.set_xticks(ks)
     ax_k.set_ylim(1.2, 2.6)
@@ -633,7 +635,7 @@ def main():
     i_mode  = int(np.argmin(np.abs(rattles_mm - _mode)))
     u_mode  = u_mc[i_mode]
     print(f"Loaded canonical MC: {len(rattles_mm)} samples, "
-          f"max = {rattles_mm.max():.3f} mm (peak-to-peak range); "
+          f"max = {rattles_mm.max():.3f} mm (departure from centre); "
           f"mode ≈ {_mode:.3f} mm (sample {i_mode} = {rattles_mm[i_mode]:.3f} mm)")
 
     # Static figures
@@ -658,15 +660,11 @@ def main():
         fh.write(base64.b64decode(b64_partial))
     print(f"  → {png_partial}")
 
-    # Key-frame strips for PDF
+    # Key-frame strips
     print("Generating key-frame strips …")
     strip_nom_trans = os.path.join(strips_dir, "strip_nominal_translation.png")
     make_keyframe_strip(np.zeros(N), strip_nom_trans, mode="translation")
     print(f"  → {strip_nom_trans}")
-
-    strip_nom_rot = os.path.join(strips_dir, "strip_nominal_rotation.png")
-    make_keyframe_strip(np.zeros(N), strip_nom_rot, mode="rotation")
-    print(f"  → {strip_nom_rot}")
 
     strip_wc_trans = os.path.join(strips_dir, "strip_worst_translation.png")
     make_keyframe_strip(u_worst, strip_wc_trans, mode="translation")
@@ -678,25 +676,20 @@ def main():
 
     gif_nom_path = gif_wc_path = gif_mode_path = gif_rot_path = None
     if not args.no_gif:
-        print("Generating nominal translation GIF (with polytope) …")
-        gif_nom_path, nom_rattle = make_gif(
+        print("Generating nominal forced-excursion GIF (with polytope) …")
+        gif_nom_path, nom_dep = make_gif(
             np.zeros(N), os.path.join(anim_dir, "rattle_nominal.gif"))
-        print(f"  → {gif_nom_path}  ({nom_rattle:.2f} mm)")
+        print(f"  → {gif_nom_path}  ({nom_dep:.2f} mm)")
 
-        print("Generating worst-case translation GIF (with polytope) …")
-        gif_wc_path, wc_rattle = make_gif(
+        print("Generating worst-case forced-excursion GIF (with polytope) …")
+        gif_wc_path, wc_dep = make_gif(
             u_worst, os.path.join(anim_dir, "rattle_worst_case.gif"))
-        print(f"  → {gif_wc_path}  ({wc_rattle:.2f} mm)")
+        print(f"  → {gif_wc_path}  ({wc_dep:.2f} mm)")
 
-        print("Generating near-mode (typical as-built) translation GIF …")
-        gif_mode_path, mode_rattle = make_gif(
+        print("Generating near-mode (typical as-built) GIF …")
+        gif_mode_path, mode_dep = make_gif(
             u_mode, os.path.join(anim_dir, "rattle_mode.gif"))
-        print(f"  → {gif_mode_path}  ({mode_rattle:.2f} mm)")
-
-        print("Generating rotation GIF (max Δθ mode) …")
-        gif_rot_path, rot_range = make_rotation_gif(
-            np.zeros(N), os.path.join(anim_dir, "rattle_rotation.gif"))
-        print(f"  → {gif_rot_path}  ({rot_range:.3f} mrad range)")
+        print(f"  → {gif_mode_path}  ({mode_dep:.2f} mm)")
 
     print("\nAll outputs written.")
     return {
