@@ -4,7 +4,7 @@ Canonical Monte-Carlo generator for the ITER VV lateral-rattle (n=1) study.
 WHAT THIS PRODUCES
 ------------------
 The committed, reproducible dataset behind every Monte-Carlo number in the
-report (``docs/vv-research-findings.html``).  Run once; the arrays it writes
+report (``docs/vv-lateral-displacement-analysis.html``).  Run once; the arrays it writes
 to ``data/`` are loaded by ``vv_viz.py`` to build the figures.
 
 RATTLE METRIC  (peak-to-peak range)

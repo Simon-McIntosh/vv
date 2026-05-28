@@ -1,13 +1,13 @@
 """
 Build the Word version of the ITER VV lateral-rattle report.
 
-Style-matched to docs/vv-research-findings.html (blue #2b5797 / #1a3a6e palette,
+Style-matched to docs/vv-lateral-displacement-analysis.html (blue #2b5797 / #1a3a6e palette,
 left-accented callout boxes, blue-header tables) and embeds the worst-case and
 near-mode rattle GIFs. Word renders an animated GIF as its first frame, so a
 key-frame strip is placed beneath each GIF to convey the motion in print; the
 animations play in the served HTML report.
 
-    uv run python build_docx.py     # -> docs/vv-rattle-report.docx
+    uv run python build_docx.py     # -> docs/vv-lateral-displacement-analysis.docx
 """
 from __future__ import annotations
 import os
@@ -371,7 +371,7 @@ def main():
                       "the repository. Source: Simon-McIntosh/vv.")
     fr.font.size = Pt(8); fr.font.color.rgb = GREY
 
-    out = os.path.join(DOCS, "vv-rattle-report.docx")
+    out = os.path.join(DOCS, "vv-lateral-displacement-analysis.docx")
     doc.save(out)
     print(f"-> wrote {out}")
 

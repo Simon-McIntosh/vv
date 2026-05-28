@@ -5,7 +5,7 @@ Reproduce the ITER VV lateral-rattle report end-to-end.
 
 Step 1 regenerates the canonical 5,000-sample peak-to-peak Monte-Carlo dataset
 (fixed seed) into data/. Step 2 regenerates every figure, key-frame strip and
-GIF embedded in docs/vv-research-findings.html. Run build_docx.py afterwards for
+GIF embedded in docs/vv-lateral-displacement-analysis.html. Run build_docx.py afterwards for
 the Word report. (vv_rattle_mc.py is a supplementary LP / pseudoinverse
 verification using the per-direction reach metric; it is not part of the report
 pipeline.)
