@@ -179,26 +179,21 @@ def plot_vv(ax, q_m_rad: np.ndarray, u_m: np.ndarray,
     ax.plot(vx, vy, "-", color="#1e4d9b", lw=3.5, zorder=3)
 
     # ── machine axis ──
-    ax.plot(0, 0, "+", color="#222", ms=18, mew=2.2, zorder=9, clip_on=False)
+    ax.plot(0, 0, "+", color="#222", ms=9, mew=1.1, zorder=9, clip_on=False)
 
     # ── VV centre dot — bright red so it reads against the polytope ──
     ax.plot(DX, DY, "o", color="#cc2200", ms=8, zorder=9,
             markeredgecolor="white", markeredgewidth=1.2)
 
-    # ── radial spokes: spoke 0 (top, φ=90°) orange as orientation marker ──
+    # ── radial spokes (all uniform; the previous orange orientation marker is
+    # no longer needed — rotation graphics have been removed from the report) ──
     for i, φi in enumerate(ANGLES):
         ex = R_M * np.cos(φi + DTH) + DX
         ey = R_M * np.sin(φi + DTH) + DY
-        if i == 0:
-            ax.plot([DX, ex], [DY, ey], "-", color="#e06000",
-                    lw=2.5, alpha=0.9, zorder=4)   # orientation marker
-            ax.plot(ex, ey, "o", color="#e06000", ms=7, zorder=4,
-                    markeredgecolor="white", markeredgewidth=0.8)
-        else:
-            ax.plot([DX, ex], [DY, ey], "-", color="#5a8fd4",
-                    lw=1.2, alpha=0.65, zorder=2)
-            ax.plot(ex, ey, "o", color="#5a8fd4", ms=5, zorder=3,
-                    markeredgecolor="white", markeredgewidth=0.6)
+        ax.plot([DX, ex], [DY, ey], "-", color="#5a8fd4",
+                lw=1.2, alpha=0.65, zorder=2)
+        ax.plot(ex, ey, "o", color="#5a8fd4", ms=5, zorder=3,
+                markeredgecolor="white", markeredgewidth=0.6)
 
     # ── support linkages ──────────────────────────────────────────────────
     # Each four-bar linkage MOVES WITH THE VESSEL radially (radial motion is
@@ -419,18 +414,27 @@ def figure_three_panel(u_worst: np.ndarray) -> str:
         poly = rattle_polytope_2d(u, nd=120)
         dep_mm, q_star = _max_departure_state(u, nd=144)
         plot_vv(ax, q_star, u, polytope_m=poly)
-        # arrow from machine axis (origin) to displaced VV centre — make it bold
+        # arrow from machine axis (origin) to displaced VV centre — slim
         DX, DY = q_star[0] * MAG, q_star[1] * MAG
         ax.annotate(
             "", xy=(DX, DY), xytext=(0, 0),
-            arrowprops=dict(arrowstyle="-|>,head_length=0.6,head_width=0.4",
-                            color="#cc2200", lw=3.2, shrinkA=0, shrinkB=4),
+            arrowprops=dict(arrowstyle="-|>,head_length=0.3,head_width=0.2",
+                            color="#cc2200", lw=1.6, shrinkA=0, shrinkB=2),
             zorder=12,
         )
-        # mm-scale label next to the arrow
-        ax.text(DX * 0.55, DY * 0.55 + 0.25, f"{dep_mm:.2f} mm",
-                color="#cc2200", fontsize=9, weight="bold", ha="left", va="bottom",
-                bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="#cc2200", alpha=0.9, lw=0.8),
+        # label offset perpendicular to the arrow so it sits clear of the polytope
+        arrow_len = float(np.hypot(DX, DY))
+        if arrow_len > 1e-6:
+            px, py = -DY / arrow_len, DX / arrow_len      # unit perp (left of arrow)
+        else:
+            px, py = 0.0, 1.0
+        offset = 1.3                                       # m at MAG=500
+        lx = DX * 0.5 + px * offset
+        ly = DY * 0.5 + py * offset
+        ax.text(lx, ly, f"{dep_mm:.2f} mm",
+                color="#cc2200", fontsize=9, weight="bold", ha="center", va="center",
+                bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="#cc2200",
+                          alpha=0.95, lw=0.8),
                 zorder=13)
         ax.set_title(f"{label}\nMax displacement from centre = {dep_mm:.2f} mm",
                      fontsize=9.5, color="#333")
@@ -438,8 +442,7 @@ def figure_three_panel(u_worst: np.ndarray) -> str:
     legend_els = [
         Line2D([0], [0], color="#d8d8d8", lw=1.5, label="Reference ring"),
         Line2D([0], [0], color="#1e4d9b", lw=3.0, label=f"VV ring at max displacement (×{MAG})"),
-        Line2D([0], [0], color="#cc2200", lw=2.2, label="Max-displacement vector (origin → VV centre)"),
-        Line2D([0], [0], color="#e06000", lw=2.5, label="Spoke 0 (orientation)"),
+        Line2D([0], [0], color="#cc2200", lw=1.6, label="Max-displacement vector (origin → VV centre)"),
         Line2D([0], [0], color="#cc2200", lw=2.5, label="Slot limits (±1.5 mm)"),
         mpatches.Patch(facecolor="#2b5797", alpha=0.15, edgecolor="#2b5797",
                        label="Displacement polytope"),
@@ -447,7 +450,7 @@ def figure_three_panel(u_worst: np.ndarray) -> str:
         Line2D([0], [0], marker="o", color="#e07000", ms=7, ls="none", label="Pin — near limit"),
         Line2D([0], [0], marker="o", color="#cc2200", ms=7, ls="none", label="Pin — at limit"),
     ]
-    fig.legend(handles=legend_els, loc="lower center", ncol=5,
+    fig.legend(handles=legend_els, loc="lower center", ncol=4,
                fontsize=7.5, frameon=True, fancybox=False,
                edgecolor="#ccc", bbox_to_anchor=(0.5, 0.0))
 

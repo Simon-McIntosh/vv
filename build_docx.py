@@ -175,17 +175,18 @@ def main():
                      "centre (n = 1 first-wall shift)")
     sr.font.size = Pt(8.5); sr.font.color.rgb = GREY
 
-    callout(doc, "key", [
-        ("The VV is supported by 9 inward-inclined dual-hinge gravity supports; the 15° "
-         "inclination provides a gravitational centring force, so the vessel self-centres at "
-         "rest. The n = 1 first-wall metric is the ", False),
-        ("max lateral displacement of the VV centre from the gravitational centre", True),
-        (f". Nominal kinematic envelope = 1.55 mm; over 5000 iid Uniform(±1.5 mm) assemblies, "
-         f"P95 = {p95:.2f} mm, P99 = {p99:.2f} mm, max = {rmax:.2f} mm; quiescent contribution "
-         "= 0. Start-up (0→3 MA / 10 s) is favourable: passive vessel currents pull the wall "
-         "TOWARD the offset toroidal-field magnetic centre and CLOSE the n = 1 mismatch. "
-         "Disruption is the bounding VVGS lateral load case (~12 mm/s impact, ~1 MN peak).",
-         False),
+    callout(doc, "info", [
+        ("The VV rests on 9 inward-inclined gravity supports whose 15° tilt provides a "
+         "gravitational centring force: the vessel self-centres at rest and departs from the "
+         "machine axis only under an applied lateral force; pendulum period ≈ 10 s. The "
+         "n = 1 first-wall metric is the ", False),
+        ("max lateral displacement of the VV centre from the machine axis", True),
+        (f". Nominal envelope 1.55 mm; across the assembly population P95 = {p95:.2f} mm, "
+         f"max = {rmax:.2f} mm; at-rest contribution = 0. Start-up (0→3 MA / 10 s) is "
+         "favourable: passive vessel currents pull the wall toward the offset toroidal-field "
+         "magnetic centre and reduce the n ≤ 4 misalignment. Disruption is the bounding VVGS "
+         "lateral load case (~12 mm/s impact, ~1 MN peak). Gap measurements tighten the bound "
+         "— each measured sector pulls the polytope toward the centre.", False),
     ], title="Summary of findings:")
 
     heading2(doc, "1 — Problem & assumptions")
