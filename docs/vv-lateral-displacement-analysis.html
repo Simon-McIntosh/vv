@@ -3,7 +3,18 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ITER VV Lateral Displacement Analysis</title>
+<meta name="docs-project" content="vv">
+<meta name="plan-slug" content="vv-lateral-displacement-analysis">
+<meta name="plan-title" content="ITER VV Lateral Displacement Analysis">
+<meta name="plan-status" content="shipped">
+<meta name="plan-roi" content="high">
+<meta name="plan-effort" content="L">
+<meta name="plan-tier" content="opus">
+<meta name="plan-summary" content="Canonical n=1 first-wall metric: max lateral displacement of the VV centre from the gravitational centre. Nominal 1.55mm; MC (5k, scipy HiGHS LP) P95 2.27mm, max 2.98mm. VVGS 15deg gravitational centring (K~3kN/mm, T~10s); start-up favourable (self-aligning); disruption ~1MN / ~12mm/s is the bounding VVGS lateral case. Word + HTML deliverable.">
+<meta name="plan-informs" content="vv-rattle-plan">
+<title>ITER VV Lateral Displacement Analysis · vv</title>
+<link rel="stylesheet" href="/_shared/foundation.css">
+<link rel="stylesheet" href="/_shared/dashboard.css">
 <style>
 body{font-family:'Segoe UI',system-ui,sans-serif;max-width:1100px;margin:0 auto;padding:1.5rem 2rem;color:#222;line-height:1.55}
 h1{border-bottom:3px solid #2b5797;padding-bottom:.4em;color:#1a3a6e}
@@ -27,6 +38,10 @@ pre{background:#f5f5f5;border:1px solid #ddd;border-radius:4px;padding:.8em 1em;
 .num{font-weight:bold;font-family:monospace;font-size:1.05em}
 .author{color:#1a3a6e;font-weight:600}
 </style>
+<meta name="reckon-type" content="plan">
+<meta name="plan-modified" content="2026-06-15">
+<meta name="plan-version" content="2">
+<meta name="plan-impl" content="1.0">
 </head>
 <body>
 <h1>ITER Vacuum Vessel — Lateral Displacement Analysis</h1>
@@ -171,7 +186,7 @@ polytope (the kinematic envelope of all reachable VV-centre positions). Displace
 magnified ×500.</p>
 
 <figure>
-  <img src="plots/vv_states.png" alt="Two-panel VV state diagram">
+  <img src="/vv/plots/vv_states.png" alt="Two-panel VV state diagram">
   <figcaption>Left — <strong>nominal assembly</strong> (u = 0): the polytope is symmetric
   about the machine axis and the maximum displacement is 1.55 mm in any direction. Right —
   <strong>worst observed MC sample</strong>: the assembly offsets shift the polytope
@@ -194,13 +209,13 @@ usage (blue = slack, orange = near limit, red = at stop).</p>
 
 <div style="display:flex;gap:1em;flex-wrap:wrap;justify-content:center;align-items:flex-start">
   <figure style="flex:1 1 360px;max-width:520px;margin:0">
-    <img src="animations/rattle_worst_case.gif" alt="Worst-case forced excursion">
+    <img src="/vv/animations/rattle_worst_case.gif" alt="Worst-case forced excursion">
     <figcaption><strong>Worst observed MC sample.</strong> Offset assembly; maximum forced
     departure from the machine axis ≈ 2.98 mm — the kinematic ceiling for the worst random
     assembly drawn from the §1 uniform prior.</figcaption>
   </figure>
   <figure style="flex:1 1 360px;max-width:520px;margin:0">
-    <img src="animations/rattle_mode.gif" alt="Near-mode (typical) forced excursion">
+    <img src="/vv/animations/rattle_mode.gif" alt="Near-mode (typical) forced excursion">
     <figcaption><strong>Typical as-built assembly</strong> (drawn near the distribution
     mode). Maximum forced departure ≈ 1.49 mm — the most likely value an as-built machine
     will actually exhibit.</figcaption>
@@ -216,7 +231,7 @@ centre from the gravitational centre is computed (72-direction LP). Reproducibly
 <code>vv_mc_generator.py</code> with fixed seed 20260527.</p>
 
 <figure>
-  <img src="plots/mc_dashboard.png" alt="MC distribution and CDF">
+  <img src="/vv/plots/mc_dashboard.png" alt="MC distribution and CDF">
   <figcaption>Distribution (left) and CDF (right) of the maximum lateral displacement of the
   VV centre from the gravitational centre, over 5000 randomly-drawn assemblies. The nominal
   (centred-assembly) value is 1.55 mm; offset assemblies can reach further from the centre
@@ -250,7 +265,7 @@ polytope toward the centre. With all 9 measured and found near-centred, the cond
 maximum displacement collapses to the 1.55 mm nominal envelope.</p>
 
 <figure>
-  <img src="plots/partial_measurement.png" alt="Effect of gap measurements">
+  <img src="/vv/plots/partial_measurement.png" alt="Effect of gap measurements">
   <figcaption>Left — distribution of the maximum lateral displacement; measuring all 9 gaps
   reveals one value from this distribution. Right — conditional P95 vs number of measured
   sectors, for two scenarios of the measured values: centred (lowest residual bound) and

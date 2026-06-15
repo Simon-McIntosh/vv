@@ -3,7 +3,18 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ITER VVGS Gravitational Centring — Mechanism, Geometry &amp; Confidence</title>
+<meta name="docs-project" content="vv">
+<meta name="plan-slug" content="vvgs-pendulum-mechanism">
+<meta name="plan-title" content="ITER VVGS Gravitational Centring — Mechanism, Geometry &amp; Confidence">
+<meta name="plan-status" content="shipped">
+<meta name="plan-roi" content="mid">
+<meta name="plan-effort" content="M">
+<meta name="plan-tier" content="opus">
+<meta name="plan-summary" content="First-principles derivation of VVGS lateral gravitational centring: nine inward-inclined (15deg) dual hinges form an inclined-hinge pendulum, virtual pivot above the CoG, L_eff~26m, K~3kN/mm, T~10s. Examines alpha to 0deg and 45deg limits and assesses model confidence against geometry and external evidence. Companion to the lateral-displacement analysis.">
+<meta name="plan-informs" content="vv-lateral-displacement-analysis">
+<title>ITER VVGS Gravitational Centring — Mechanism, Geometry &amp; Confidence · vv</title>
+<link rel="stylesheet" href="/_shared/foundation.css">
+<link rel="stylesheet" href="/_shared/dashboard.css">
 <style>
 body{font-family:'Segoe UI',system-ui,sans-serif;max-width:1100px;margin:0 auto;padding:1.5rem 2rem;color:#222;line-height:1.55}
 h1{border-bottom:3px solid #2b5797;padding-bottom:.4em;color:#1a3a6e}
@@ -26,6 +37,10 @@ pre{background:#f5f5f5;border:1px solid #ddd;border-radius:4px;padding:.8em 1em;
 .author{color:#1a3a6e;font-weight:600}
 a{color:#1a3a6e}
 </style>
+<meta name="reckon-type" content="plan">
+<meta name="plan-modified" content="2026-06-15">
+<meta name="plan-version" content="2">
+<meta name="plan-impl" content="1.0">
 </head>
 <body>
 <h1>ITER VVGS Gravitational Centring — Mechanism, Geometry &amp; Confidence</h1>
@@ -62,7 +77,7 @@ length is then</p>
 <pre>L<sub>eff</sub>(α) = h(α) − z<sub>CoG</sub> = R<sub>s</sub> / tan(α) − z<sub>CoG</sub>.</pre>
 
 <figure>
-  <img src="diagrams/A_single_strut.png" alt="Single strut + convergence point">
+  <img src="/vv/diagrams/A_single_strut.png" alt="Single strut + convergence point">
   <figcaption><strong>Diagram A.</strong> A single inclined VVGS strut. The thick blue
   segment is the physical strut between its ground anchor (at radius R<sub>s</sub>) and
   the vessel attachment. The dashed blue line is its <em>extended</em> axis — produced
@@ -85,7 +100,7 @@ can only execute small motions that look like a rotation about P. P is the syste
 from P to the centre of gravity.</p>
 
 <figure>
-  <img src="diagrams/B_virtual_pivot.png" alt="Multi-strut virtual pivot">
+  <img src="/vv/diagrams/B_virtual_pivot.png" alt="Multi-strut virtual pivot">
   <figcaption><strong>Diagram B.</strong> Cross-section through the machine axis, showing
   two inclined struts (one on either side). Each strut's axis, extended (dashed), reaches
   the same convergence point <span style="color:#cc2200">P</span>; this is true for all
@@ -112,7 +127,7 @@ L<sub>eff</sub> to be long.</p>
 z<sub>CoG</sub>. Sweeping α gives the curve below.</p>
 
 <figure>
-  <img src="diagrams/C_Leff_vs_angle.png" alt="L_eff vs alpha and K vs alpha">
+  <img src="/vv/diagrams/C_Leff_vs_angle.png" alt="L_eff vs alpha and K vs alpha">
   <figcaption><strong>Diagram C.</strong> The effective pendulum length L<sub>eff</sub>
   (blue, left axis) and the corresponding lateral stiffness K = W/L<sub>eff</sub> (red,
   dashed, right axis) as a function of strut inclination α. Three regimes are marked:

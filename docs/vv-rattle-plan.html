@@ -6,11 +6,11 @@
   <meta name="docs-project" content="vv">
   <meta name="plan-slug" content="vv-rattle-plan">
   <meta name="plan-title" content="VV Rattle MC Analysis">
-  <meta name="plan-status" content="in-progress">
+  <meta name="plan-status" content="superseded">
   <meta name="plan-roi" content="high">
   <meta name="plan-effort" content="M">
   <meta name="plan-tier" content="sonnet">
-  <meta name="plan-summary" content="Peak-to-peak n=1 rattle: ceiling 3.09mm (nominal=worst case), MC P95=3.01mm; reproducible generator + HTML/Word reports">
+  <meta name="plan-summary" content="Superseded by vv-lateral-displacement-analysis. Original peak-to-peak n=1 rattle framing (ceiling 3.09mm) reframed to the max lateral displacement of the VV centre from the gravitational centre (nominal 1.55mm; MC P95 2.27mm, max 2.98mm). LP/solver decisions (scipy HiGHS, independent gaps) carried forward; 20k MC + multi-radius envelope deferred to the extension.">
   <title>VV Rattle MC Analysis · vv</title>
   <link rel="stylesheet" href="/_shared/foundation.css">
   <link rel="stylesheet" href="/_shared/dashboard.css">
@@ -29,8 +29,8 @@
     .highlight { background: #fffbe6; border: 1px solid #e8c840; padding: 0.2em 0.5em; border-radius: 3px; }
   </style>
 <meta name="reckon-type" content="plan">
-<meta name="plan-modified" content="2026-05-27">
-<meta name="plan-version" content="1">
+<meta name="plan-modified" content="2026-06-15">
+<meta name="plan-version" content="2">
 </head>
 <body>
 <main class="plan-doc">
@@ -288,18 +288,20 @@
 
   <section data-reckon="followups" id="followups" class="r-followups">
 <h2><span class="sec">§</span> Followups</h2>
-<article class="r-fu" data-id="f1" data-status="open" data-tier="sonnet" data-written-by="smc" data-written-at="2025-05-27" data-recommends-skill="/reckon-ship vv-rattle-plan" data-resolved-at="" data-resolved-by="">
+<article class="r-fu" data-id="f1" data-status="resolved" data-tier="sonnet" data-written-by="smc" data-written-at="2025-05-27" data-recommends-skill="/reckon-ship vv-rattle-plan" data-resolved-at="2026-06-15T14:12:09+00:00" data-resolved-by="smc">
     <h4 class="r-fu-title">Fix bounding_box_analysis.py and update main.py</h4>
     <div class="r-fu-body">Replace pseudoinverse with scipy LP in find_extreme_position() .
         Update main.py to call vv_rattle_mc.main() .</div>
     <pre class="r-fu-prompt">Fix bounding_box_analysis.py: replace find_extreme_position() pseudoinverse approach with scipy.optimize.linprog (HiGHS). The pseudoinverse gives 1.920mm but the true LP = 1.547mm (24% overestimate, produces τ_max=2.086mm &gt; 1.5mm limit). Also update main.py to import and call vv_rattle_mc.main(). Verify the fix by running both functions and checking dx_max ≈ 1.547mm. Commit immediately after each fix.</pre>
+    <p class="r-fu-outcome">Done. <code>bounding_box_analysis.py</code> removed; the canonical generator <code>vv_mc_generator.py</code> uses <code>scipy.optimize.linprog</code> (HiGHS) for the per-direction LP, and <code>main.py</code> now drives the report pipeline (<code>vv_mc_generator.main()</code> + <code>vv_viz.main()</code>). The pseudoinverse path is gone.</p>
     </article>
-<article class="r-fu" data-id="f2" data-status="open" data-tier="sonnet" data-written-by="smc" data-written-at="2025-05-27" data-recommends-skill="/reckon-ship vv-rattle-plan" data-resolved-at="" data-resolved-by="">
+<article class="r-fu" data-id="f2" data-status="resolved" data-tier="sonnet" data-written-by="smc" data-written-at="2025-05-27" data-recommends-skill="/reckon-ship vv-rattle-plan" data-resolved-at="2026-06-15T14:12:09+00:00" data-resolved-by="smc">
     <h4 class="r-fu-title">Run 20k-sample MC and produce assembly team report</h4>
     <div class="r-fu-body">Run MC with 20k samples for better P99 tail statistics. Produce a standalone
         self-contained HTML report (base64 plots, key numbers table, assembly guidance).
         Include displacement envelope at multiple attachment radii (R=1m, 3m, 5m).</div>
     <pre class="r-fu-prompt">Run vv_rattle_mc.py with n_samples=20000. Then produce docs/vv-assembly-report.html — a self-contained deliverable for the ITER assembly team with: (1) key bounding numbers table (P95, P99, worst case in mm); (2) Figure 1 (physics demonstration) and Figure 2 (MC dashboard) embedded as base64; (3) displacement at R=1m, 3m, 5m (translation + rotation contribution); (4) assembly guidance text. Keep it factual and concise. No code review history in this document.</pre>
+    <p class="r-fu-outcome">Superseded by the reframed canonical analysis (<a href="vv-lateral-displacement-analysis.html">vv-lateral-displacement-analysis</a>). The metric was reframed from peak-to-peak rattle to the maximum lateral displacement of the VV centre from the gravitational centre, and shipped as Word + HTML at N=5000 (P95 2.27mm, max 2.98mm). The 20k-sample tail statistics (the locked <code>mc-sample-count</code> decision) and the multi-radius R=1/3/5m envelope were NOT carried over and remain open items for the planned extension.</p>
     </article>
 </section>
 </main>
