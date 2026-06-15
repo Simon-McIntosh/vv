@@ -5,12 +5,12 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="docs-project" content="vv">
 <meta name="plan-slug" content="vvgs-pendulum-mechanism">
-<meta name="plan-title" content="ITER VVGS Gravitational Centring — Mechanism, Geometry &amp; Confidence">
+<meta name="plan-title" content="ITER VVGS Gravitational Centring — Mechanism, Geometry & Confidence">
 <meta name="plan-status" content="shipped">
 <meta name="plan-roi" content="mid">
 <meta name="plan-effort" content="M">
 <meta name="plan-tier" content="opus">
-<meta name="plan-summary" content="First-principles derivation of VVGS lateral gravitational centring: nine inward-inclined (15deg) dual hinges form an inclined-hinge pendulum, virtual pivot above the CoG, L_eff~26m, K~3kN/mm, T~10s. Examines alpha to 0deg and 45deg limits and assesses model confidence against geometry and external evidence. Companion to the lateral-displacement analysis.">
+<meta name="plan-summary" content="First-principles derivation of VVGS lateral gravitational centring: nine inward-inclined (15deg) dual-hinge 4-bar supports form an inclined-hinge pendulum, virtual pivot above the CoG, L_eff~32m, K~2.7 kN/mm, T~11s. Side-on rocking GIF of the 4-bar mechanism. Companion to the lateral-displacement analysis.">
 <meta name="plan-informs" content="vv-lateral-displacement-analysis">
 <title>ITER VVGS Gravitational Centring — Mechanism, Geometry &amp; Confidence · vv</title>
 <link rel="stylesheet" href="/_shared/foundation.css">
@@ -39,8 +39,7 @@ a{color:#1a3a6e}
 </style>
 <meta name="reckon-type" content="plan">
 <meta name="plan-modified" content="2026-06-15">
-<meta name="plan-version" content="2">
-<meta name="plan-impl" content="1.0">
+<meta name="plan-version" content="3">
 </head>
 <body>
 <main class="plan-doc">
@@ -65,12 +64,12 @@ remaining holes are.
 
 <p>Each VVGS strut is a near-vertical link whose axis is tilted <strong>α = 15°</strong>
 from vertical, leaning inward. Its ground anchor sits at radius
-<strong>R<sub>s</sub> ≈ 8 m</strong> on a horizontal support ring under the lower ports.
+<strong>R<sub>s</sub> ≈ 10 m</strong> on a horizontal support ring under the lower ports.
 Extending the strut's central axis upward, it meets the vertical machine axis at a height</p>
 
 <pre>h(α) = R<sub>s</sub> / tan(α)</pre>
 
-<p>above the support ring. For the operational 15°, h ≈ 29.9 m — far above
+<p>above the support ring. For the operational 15°, h ≈ 37.3 m — far above
 the vessel. The vessel's centre of gravity sits roughly z<sub>CoG</sub> ≈ 5 m above
 the support attachment (this is an estimate — see §4 on confidence). The effective pendulum
 length is then</p>
@@ -116,10 +115,24 @@ horizontal displacement of the CoG) is the standard result</p>
 
 <pre>K = W / L<sub>eff</sub>,        T<sub>n</sub> = 2π · √(L<sub>eff</sub> / g),</pre>
 
-<p>with W = M g the supported weight (M ≈ 8000 t). For α = 15° this gives
-L<sub>eff</sub> ≈ 24.9 m, K ≈ 3.16 kN/mm and a natural period
-T<sub>n</sub> ≈ 10.0 s — a <em>soft</em> pendulum because the geometry forces
+<p>with W = M g the supported weight (M ≈ 9000 t). For α = 15° this gives
+L<sub>eff</sub> ≈ 32.3 m, K ≈ 2.73 kN/mm and a natural period
+T<sub>n</sub> ≈ 11.4 s — a <em>soft</em> pendulum because the geometry forces
 L<sub>eff</sub> to be long.</p>
+
+<figure>
+  <img src="/vv/diagrams/D_rocking_pendulum.gif" alt="Side-on VV rocking on its 15-degree dual-hinge 4-bar supports">
+  <figcaption><strong>Animation D.</strong> The mechanism in motion, viewed side-on
+  (poloidal R–Z plane). Each VVGS is drawn as its actual <strong>15° inclined dual-hinge
+  (parallelogram) 4-bar</strong> — two parallel links between a fixed ground block and the
+  moving vessel block. Extended, the strut axes converge at the virtual pivot
+  <span style="color:#cc2200">P</span> (here derived from the 15° geometry), and the rigid
+  vessel <strong>rocks about P as a gravitational pendulum</strong> of length
+  L<sub>eff</sub> ≈ 26–32 m (set by the estimated CoG height — see §4). As it sways, the parallel links swing
+  about their ground hinges and the CoG (X) feels a gravitational restoring force toward the
+  machine axis. <em>Lateral sway is exaggerated ~×400 for visibility</em> — the real at-rest
+  excursion is sub-millimetre.</figcaption>
+</figure>
 
 <!-- ═══════════════════════════════════════════════════════════ §3 -->
 <h2 id="s3">§3 — L<sub>eff</sub> as a function of inclination angle</h2>
@@ -147,12 +160,12 @@ inward inclination converts the system into a stable pendulum by creating a virt
 above the CoG.</p>
 
 <h3>Limit case: α = 45°</h3>
-<p>At α = 45° the convergence point sits at h = R<sub>s</sub> = 8 m above the
+<p>At α = 45° the convergence point sits at h = R<sub>s</sub> = 10 m above the
 support attachment. With z<sub>CoG</sub> ≈ 5 m the effective pendulum is only
-L<sub>eff</sub> ≈ 3.0 m — about an order of magnitude shorter than at 15°. The
+L<sub>eff</sub> ≈ 5.0 m — about an order of magnitude shorter than at 15°. The
 stiffness K = W/L<sub>eff</sub> rises by the same factor and the natural period drops to
-T<sub>n</sub> ≈ 3.5 s. This is a much stiffer pendulum: a more strongly centred
-vessel, but a strut tilt that would be impractical for a gravity support carrying ~8000 t.
+T<sub>n</sub> ≈ 4.5 s. This is a much stiffer pendulum: a more strongly centred
+vessel, but a strut tilt that would be impractical for a gravity support carrying ~9000 t.
 The 15° design value is a deliberate balance between centring stiffness and structural
 practicality.</p>
 
@@ -160,7 +173,7 @@ practicality.</p>
 <p>If α is increased far enough that h = z<sub>CoG</sub>, the convergence point P falls
 to the level of the CoG and L<sub>eff</sub> → 0; beyond this critical angle</p>
 
-<pre>α<sub>crit</sub> = arctan(R<sub>s</sub> / z<sub>CoG</sub>) ≈ 58°</pre>
+<pre>α<sub>crit</sub> = arctan(R<sub>s</sub> / z<sub>CoG</sub>) ≈ 63°</pre>
 
 <p>P lies <em>below</em> the CoG. The vessel is then a true inverted pendulum about P
 and is unstable: any small lateral perturbation grows. The operational α = 15° sits far on
@@ -178,7 +191,7 @@ moderate uncertainty from the parameters we have estimated rather than measured.
 <tr><th>Statement</th><th>Confidence</th><th>Why</th></tr>
 <tr><td>The 15° inward inclination provides a centring force</td><td>HIGH</td><td>Stated explicitly in the ITER VVGS literature as design intent (see §5).</td></tr>
 <tr><td>The mechanism is a stable (not inverted) pendulum at α = 15°</td><td>HIGH</td><td>Pure geometry: P sits ~30 m above the CoG, far above α<sub>crit</sub>.</td></tr>
-<tr><td>L<sub>eff</sub> ≈ 26 m, K ≈ 3 kN/mm, T<sub>n</sub> ≈ 10 s</td><td>MODERATE</td><td>Sensitive to z<sub>CoG</sub> (estimated) and to the exact link geometry.</td></tr>
+<tr><td>L<sub>eff</sub> ≈ 32 m, K ≈ 2.7 kN/mm, T<sub>n</sub> ≈ 11 s</td><td>MODERATE</td><td>Sensitive to z<sub>CoG</sub> (estimated) and to the exact link geometry; K ranges ~2.7–3.2 kN/mm over z<sub>CoG</sub> = 5–10 m.</td></tr>
 <tr><td>Linear/harmonic small-displacement model</td><td>HIGH</td><td>L<sub>eff</sub> ≫ 1.5 mm gap — nonlinear corrections are ppm.</td></tr>
 <tr><td>2-D lateral mode captures the n = 1 first-wall shift</td><td>HIGH</td><td>The other rigid-body modes are either irrelevant (n = 0 rotation) or strongly constrained.</td></tr>
 </table>
@@ -208,8 +221,9 @@ make the from-vertical reading by far the more natural one, and the literature's
 ("stable equilibrium") only makes sense in that case — but the precise angular reference
 should be confirmed against the engineering drawing.</li>
 
-<li><strong>Supported mass M.</strong> We use M ≈ 8000 t for VV + in-vessel components. The
-VV alone is ~5200 t; the full in-vessel set adds up to the 8–9 kt range. K = W/L<sub>eff</sub>
+<li><strong>Supported mass M.</strong> We use M ≈ 9000 t for VV + in-vessel components
+(ITER VV Load Spec + mass table, ITER_D_6TLUDY). The VV alone is ~5200 t; the full in-vessel set
+brings it to the ~9 kt range. K = W/L<sub>eff</sub>
 scales with M, so K could be 15–20 % softer if a smaller effective M (say only the VV)
 actually moves with the lateral mode.</li>
 
@@ -264,7 +278,7 @@ inclined-strut / virtual-pivot result, applied to a configuration that ITER has
 deliberately designed for centring (per the published structural-analysis literature on
 the VVGS). The qualitative claim — vessel self-centres in a stable pendulum well with
 a long L<sub>eff</sub> and a soft natural frequency — is on firm ground. The numerical
-values (L<sub>eff</sub> ≈ 26 m, K ≈ 3 kN/mm, T<sub>n</sub> ≈ 10 s) are accurate to roughly
+values (L<sub>eff</sub> ≈ 32 m, K ≈ 2.7 kN/mm, T<sub>n</sub> ≈ 11 s) are accurate to roughly
 ±20 % given the estimated z<sub>CoG</sub> and supported mass; pinning them more tightly
 needs the as-built hinge geometry and the lateral mass that actually moves with the n=1
 mode.

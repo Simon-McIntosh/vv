@@ -47,10 +47,12 @@ from scipy.optimize import linprog
 from scipy.spatial import ConvexHull
 
 # ── geometry ──────────────────────────────────────────────────────────────────
+# Support-ring radius R_s ~ 10 m and supported mass M ~ 9000 t per the ITER VV
+# Load Specification + mass collection table (ITER_D_6TLUDY).
 MAG     = 500       # displacement magnification for display (polytope-diagnostic)
 N       = 9         # number of supports
-R_M     = 8.0       # VV radius (m)
-R_SLOT  = 8.5       # slot display radius — slightly outside VV (m)
+R_M     = 10.0      # VVGS support-ring radius R_s (m)
+R_SLOT  = 10.5      # slot display radius — slightly outside the support ring (m)
 DELTA_M = 0.0015    # half-gap (m) = 1.5 mm
 
 ANGLES = np.array([np.pi / 2 - 2 * np.pi * i / N for i in range(N)])
@@ -616,6 +618,135 @@ def figure_partial_measurement(rattles_all: np.ndarray, u_ref=None) -> str:
     ax_k.legend(fontsize=8, frameon=False, loc="upper right")
     ax_k.spines[["top", "right"]].set_visible(False)
 
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", dpi=110, bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+    return base64.b64encode(buf.getvalue()).decode()
+
+
+# ── rattle (polytope-width) figures ─────────────────────────────────────────────
+
+def mc_widths(u_mc: np.ndarray, nd: int = 72) -> np.ndarray:
+    """Polytope WIDTH (peak-to-peak diameter, mm) for each MC assembly.
+    Unlike departure-from-centre, the width is MAXIMISED at the centred
+    assembly (u=0) and SHRINKS as offsets cut the feasible polytope."""
+    return np.array([max_rattle_mm(u_mc[k], nd=nd) for k in range(len(u_mc))])
+
+
+def figure_rattle_dashboard(widths_mm: np.ndarray, out_base: str | None = None) -> str:
+    """Distribution + CDF of the polytope WIDTH (max rattle). The nominal
+    (u=0) width is the CEILING — offset assemblies are more constrained, so
+    the distribution sits below it. Returns base64 PNG (and saves PNG+PDF if
+    out_base given)."""
+    nom_w = max_rattle_mm(np.zeros(N), nd=72)
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5), facecolor="white")
+    fig.subplots_adjust(left=0.08, right=0.97, top=0.88, bottom=0.12, wspace=0.3)
+
+    ax1.hist(widths_mm, bins=50, color="#a5320a", alpha=0.75, edgecolor="white", lw=0.4)
+    h, e = np.histogram(widths_mm, bins=50)
+    mode = float(0.5 * (e[h.argmax()] + e[h.argmax() + 1]))
+    med  = float(np.median(widths_mm))
+    p05  = float(np.percentile(widths_mm, 5))
+    wmin = float(widths_mm.min())
+    h1 = ax1.get_ylim()[1]
+    for x, col, name, yf in [(nom_w, "#660000", "Nominal = CEILING", 0.95),
+                             (med,   "#1a6ea8", "Median",            0.78),
+                             (mode,  "#228822", "Mode",              0.63),
+                             (p05,   "#cc8800", "P5",                0.48)]:
+        ax1.axvline(x, color=col, lw=1.7, ls="--")
+        ax1.text(x, h1 * yf, f"{name}\n{x:.2f} mm", ha="center", va="top", fontsize=8,
+                 color=col, weight="bold",
+                 bbox=dict(boxstyle="round,pad=0.18", fc="white", ec=col, alpha=0.92, lw=0.8))
+    ax1.set_xlabel("Polytope width — peak-to-peak rattle (mm)", fontsize=10)
+    ax1.set_ylabel(f"Count  (n = {len(widths_mm):,})", fontsize=10)
+    ax1.set_title("VV polytope width (max rattle) — distribution", fontsize=11, color="#7a2208")
+    ax1.spines[["top", "right"]].set_visible(False)
+
+    s = np.sort(widths_mm)
+    p = np.linspace(0, 100, len(s))
+    ax2.plot(s, p, "-", color="#a5320a", lw=2)
+    ax2.fill_betweenx(p, s, alpha=0.12, color="#a5320a")
+    for pct, col in [(5, "#cc8800"), (25, "#1a6ea8"), (50, "#228822")]:
+        v = float(np.percentile(widths_mm, pct))
+        ax2.axvline(v, color=col, lw=1.4, ls="--")
+        ax2.axhline(pct, color=col, lw=0.6, ls=":", alpha=0.6)
+        ax2.text(v, pct, f" P{pct}: {v:.2f} mm", ha="left", va="bottom", fontsize=8.5,
+                 color=col, weight="bold",
+                 bbox=dict(boxstyle="round,pad=0.18", fc="white", ec=col, alpha=0.92, lw=0.8))
+    ax2.axvline(nom_w, color="#660000", lw=1.7, ls="--")
+    ax2.text(nom_w, 60, f" ceiling {nom_w:.2f} mm", ha="left", va="center", fontsize=8.5,
+             color="#660000", weight="bold",
+             bbox=dict(boxstyle="round,pad=0.18", fc="white", ec="#660000", alpha=0.92, lw=0.8))
+    ax2.set_xlabel("Polytope width (mm)", fontsize=10)
+    ax2.set_ylabel("Percentile", fontsize=10)
+    ax2.set_title("Cumulative distribution", fontsize=11, color="#7a2208")
+    ax2.spines[["top", "right"]].set_visible(False)
+    ax2.set_ylim(0, 100)
+
+    if out_base:
+        fig.savefig(out_base + ".png", dpi=110, bbox_inches="tight", facecolor="white")
+        fig.savefig(out_base + ".pdf", bbox_inches="tight", facecolor="white")
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", dpi=110, bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+    return base64.b64encode(buf.getvalue()).decode()
+
+
+def figure_two_bounds(dep_mm: np.ndarray, widths_mm: np.ndarray, out_base: str | None = None) -> str:
+    """Contrast the two metrics and place them on the 6 mm n<=4 budget axis.
+    Left  — overlaid distributions: departure-from-centre (frictionless lower
+            bound) vs polytope width (stiction-walk realistic bound).
+    Right — the VV n=1 first-wall contribution under each regime against the
+            6 mm budget. Returns base64 PNG."""
+    nom_dep = max_departure_mm(np.zeros(N), nd=72)
+    nom_w   = max_rattle_mm(np.zeros(N), nd=72)
+    dep_max = float(dep_mm.max())
+
+    fig, (axL, axR) = plt.subplots(1, 2, figsize=(13, 5.3), facecolor="white")
+    fig.subplots_adjust(left=0.06, right=0.97, top=0.86, bottom=0.13, wspace=0.22)
+
+    # Left: overlaid distributions
+    axL.hist(dep_mm, bins=50, color="#2b5797", alpha=0.6, edgecolor="white", lw=0.3,
+             label="departure from centre (frictionless)")
+    axL.hist(widths_mm, bins=50, color="#a5320a", alpha=0.6, edgecolor="white", lw=0.3,
+             label="polytope width (stiction walk)")
+    for x, col, name in [(nom_dep, "#1a3a6e", f"nominal envelope {nom_dep:.2f}"),
+                         (dep_max, "#2b5797", f"worst departure {dep_max:.2f}"),
+                         (nom_w,   "#7a2208", f"width ceiling {nom_w:.2f}")]:
+        axL.axvline(x, color=col, lw=1.6, ls="--")
+        axL.text(x, axL.get_ylim()[1] * 0.97, f" {name}", rotation=90, ha="right", va="top",
+                 fontsize=7.6, color=col, weight="bold")
+    axL.set_xlabel("Lateral metric (mm)", fontsize=10)
+    axL.set_ylabel(f"Count  (n = {len(dep_mm):,})", fontsize=10)
+    axL.set_title("Two metrics: departure-from-centre vs polytope width", fontsize=10.5, color="#333")
+    axL.legend(fontsize=8, frameon=False, loc="upper right")
+    axL.spines[["top", "right"]].set_visible(False)
+
+    # Right: budget thermometer (VV n=1 contribution vs 6 mm budget)
+    regimes = [
+        ("Frictionless\nself-centred (at rest)", 0.0, "#2a8a2a"),
+        ("From-centre\nkinematic worst", dep_max, "#2b5797"),
+        ("Stiction walk\n(polytope width)", nom_w, "#a5320a"),
+    ]
+    ypos = np.arange(len(regimes))[::-1]
+    for y, (lab, val, col) in zip(ypos, regimes):
+        axR.barh(y, val, height=0.5, color=col, alpha=0.85, edgecolor="white")
+        axR.text(val + 0.08, y, f"{val:.2f} mm", va="center", ha="left",
+                 fontsize=9, color=col, weight="bold")
+        axR.text(-0.1, y, lab, va="center", ha="right", fontsize=8.5, color="#333")
+    axR.axvline(6.0, color="#cc2200", lw=2.0)
+    axR.text(6.0, len(regimes) - 0.35, " 6 mm n≤4\n first-wall budget", color="#cc2200",
+             fontsize=8.5, weight="bold", va="top", ha="left")
+    axR.set_xlim(0, 6.8)
+    axR.set_ylim(-0.6, len(regimes) - 0.3)
+    axR.set_yticks([])
+    axR.set_xlabel("VV n = 1 first-wall contribution (mm)", fontsize=10)
+    axR.set_title("Where the VV sits on the 6 mm budget", fontsize=10.5, color="#333")
+    axR.spines[["top", "right", "left"]].set_visible(False)
+
+    if out_base:
+        fig.savefig(out_base + ".png", dpi=110, bbox_inches="tight", facecolor="white")
+        fig.savefig(out_base + ".pdf", bbox_inches="tight", facecolor="white")
     buf = io.BytesIO()
     fig.savefig(buf, format="png", dpi=110, bbox_inches="tight", facecolor="white")
     plt.close(fig)

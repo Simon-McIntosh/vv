@@ -16,17 +16,20 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
+from matplotlib.animation import FuncAnimation
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DIAGRAMS_DIR = os.path.join(HERE, "docs", "diagrams")
 os.makedirs(DIAGRAMS_DIR, exist_ok=True)
 
-# Parameters (estimates — see "Confidence" section in the HTML)
-R_S      = 8.0      # support ring radius (m)
+# Parameters (estimates — see "Confidence" section in the HTML).
+# R_s ~ 10 m and M ~ 9000 t per the ITER VV Load Specification + mass
+# collection table (ITER_D_6TLUDY).
+R_S      = 10.0     # support ring radius R_s (m)
 INCL_DEG = 15.0     # operational inclination from vertical (deg)
 Z_COG    = 5.0      # estimated CoG height above the support attachment (m)
 G        = 9.81     # m / s^2
-M_TONNES = 8000     # estimated supported mass (t) — VV + in-vessel
+M_TONNES = 9000     # supported mass (t) — VV + in-vessel
 
 
 def h_conv(alpha_deg: float) -> float:
@@ -289,6 +292,184 @@ def diagram_c() -> str:
     return out
 
 
+# ── Rocking-pendulum GIF: VV side-on on its 15° dual-hinge 4-bar supports ────
+#
+# Side-on (poloidal R–Z) schematic.  Each VVGS is drawn as its actual inclined
+# DUAL-HINGE / PARALLELOGRAM 4-BAR: two parallel links at 15° from vertical
+# between a fixed ground block and the moving vessel block.  Extended, the
+# strut axes converge at the virtual pivot P (derived from the 15° geometry),
+# and the rigid vessel rocks about P — the lateral gravitational pendulum.
+# The lateral sway is exaggerated ~×400 so the motion is visible.
+
+_RK_XG    = R_S          # ground-anchor half-span = support-ring radius (m)
+_RK_L     = 6.0          # link length (m)
+_RK_A     = 1.4          # hinge-pair separation across the 4-bar (m)
+_RK_ZC    = 11.0         # vessel-band centroid height above the ring (m)
+
+
+def _rk_pivot():
+    """Virtual pivot P and the rest-frame hinge geometry, derived from the
+    15° strut inclination so the construction is self-consistent."""
+    a = np.radians(INCL_DEG)
+    u = np.array([-np.sin(a), np.cos(a)])           # strut axis (up & inward), +x side
+    G1 = np.array([_RK_XG, 0.0])                    # ground hinge, inner link
+    V1 = G1 + _RK_L * u                             # vessel hinge, inner link
+    perp = np.array([np.cos(a), np.sin(a)])         # across the 4-bar, ~outward
+    G2 = G1 + _RK_A * perp
+    V2 = V1 + _RK_A * perp
+    # extend the strut axis to the machine axis -> convergence height h
+    t = G1[0] / np.sin(a)                            # x reaches 0 after this run
+    h = G1[1] + t * np.cos(a)
+    P = np.array([0.0, h])
+    return P, (G1, V1, G2, V2)
+
+
+def _superellipse(wx, wz, zc, n=2.6, k=160):
+    th = np.linspace(0, 2 * np.pi, k, endpoint=False)
+    x = wx * np.sign(np.cos(th)) * np.abs(np.cos(th)) ** (2.0 / n)
+    z = zc + wz * np.sign(np.sin(th)) * np.abs(np.sin(th)) ** (2.0 / n)
+    return np.column_stack([x, z])
+
+
+def _rot_about(pts, P, beta):
+    c, s = np.cos(beta), np.sin(beta)
+    R = np.array([[c, -s], [s, c]])
+    return (np.atleast_2d(pts) - P) @ R.T + P
+
+
+def _draw_rocking_frame(ax, beta, P, hinges_R, vessel_outer, vessel_inner,
+                        cog_rest, attach_rest):
+    a = np.radians(INCL_DEG)
+    h = P[1]
+    ax.clear()
+
+    # machine axis + ground baseline
+    ax.axvline(0, color="#bbbbbb", lw=0.8, ls=":")
+    ax.plot([-_RK_XG - 2.4, _RK_XG + 2.4], [0, 0], color="#8a6d3b", lw=2.2)
+    ax.add_patch(mpatches.Rectangle((-_RK_XG - 2.4, -1.4), 2 * (_RK_XG + 2.4), 1.4,
+                                    facecolor="#efe7d8", edgecolor="none", zorder=0))
+
+    # virtual pivot P + dashed convergence lines through both struts
+    for s in (+1, -1):
+        G1, V1, G2, V2 = hinges_R[s]
+        V1b = _rot_about(V1, P, beta).ravel()
+        ax.plot([G1[0], P[0]], [G1[1], P[1]], color="#cc2200", lw=0.8,
+                ls=(0, (5, 4)), alpha=0.5, zorder=1)
+    ax.plot([0], [h], marker="*", color="#cc2200", ms=20, zorder=8)
+    ax.text(0.6, h, "virtual pivot P\n(strut axes converge)", ha="left", va="center",
+            fontsize=9.5, color="#cc2200",
+            bbox=dict(boxstyle="round,pad=0.25", fc="white", ec="#cc2200", lw=0.8, alpha=0.95))
+
+    # equivalent pendulum rod P -> CoG
+    cog = _rot_about(cog_rest, P, beta).ravel()
+    ax.plot([P[0], cog[0]], [P[1], cog[1]], color="#228822", lw=1.6, ls=(0, (2, 2)),
+            alpha=0.8, zorder=2)
+    ax.text(P[0] - 0.7, (P[1] + cog_rest[1]) / 2, f"L_eff ≈ {h - cog_rest[1]:.0f} m",
+            ha="right", va="center", fontsize=9.5, color="#228822", weight="bold", rotation=90)
+
+    # vessel band (annulus), rocked about P
+    vo = _rot_about(vessel_outer, P, beta)
+    vi = _rot_about(vessel_inner, P, beta)
+    ax.fill(vo[:, 0], vo[:, 1], color="#cfe0f5", zorder=3,
+            edgecolor="#1e4d9b", lw=2.2)
+    ax.fill(vi[:, 0], vi[:, 1], color="white", zorder=4,
+            edgecolor="#1e4d9b", lw=1.4)
+    ax.text(cog[0], cog_rest[1] + 0.0, "ITER VV\n(side-on)", ha="center", va="center",
+            fontsize=9, color="#1a3a6e", zorder=6)
+    # CoG marker
+    ax.plot(cog[0], cog[1], marker="X", color="#222", ms=11, zorder=7)
+    ax.annotate("", xy=(cog[0], cog[1] - 2.4), xytext=(cog[0], cog[1]),
+                arrowprops=dict(arrowstyle="-|>", color="#444", lw=1.6), zorder=7)
+    ax.text(cog[0] + 0.4, cog[1] - 1.4, "Mg", fontsize=8.5, color="#444")
+
+    # the two inclined dual-hinge 4-bar supports
+    for s in (+1, -1):
+        G1, V1, G2, V2 = hinges_R[s]
+        V1m = _rot_about(V1, P, beta).ravel()
+        V2m = _rot_about(V2, P, beta).ravel()
+        # ground block + coupler (vessel block)
+        ax.plot([G1[0], G2[0]], [G1[1], G2[1]], color="#555", lw=4, zorder=5,
+                solid_capstyle="round")
+        ax.plot([V1m[0], V2m[0]], [V1m[1], V2m[1]], color="#1e4d9b", lw=4, zorder=6,
+                solid_capstyle="round")
+        # the two parallel links (the "4-bar")
+        for (G, V) in ((G1, V1m), (G2, V2m)):
+            ax.plot([G[0], V[0]], [G[1], V[1]], color="#1e4d9b", lw=3, zorder=5)
+        # four hinge pins
+        for pt, mov in ((G1, 0), (G2, 0), (V1m, 1), (V2m, 1)):
+            ax.plot(pt[0], pt[1], "o", ms=6, zorder=7,
+                    color="#cc2200" if mov else "#333",
+                    markeredgecolor="white", markeredgewidth=0.8)
+        # 15° inclination arc at the inner ground hinge (static side only)
+        if s == +1:
+            arc = mpatches.Arc((G1[0], G1[1]), 3.0, 3.0, angle=0, theta1=90,
+                               theta2=90 + INCL_DEG, color="#1e4d9b", lw=1.5, zorder=5)
+            ax.add_patch(arc)
+            ax.text(G1[0] - 1.9, 1.6, f"{INCL_DEG:.0f}°", color="#1e4d9b",
+                    fontsize=10, weight="bold")
+
+    ax.set_aspect("equal")
+    ax.axis("off")
+    ax.set_xlim(-_RK_XG - 3.5, _RK_XG + 3.5)
+    ax.set_ylim(-2.0, h + 4.0)
+
+
+def gif_rocking_pendulum(n_frames: int = 48, fps: int = 12, dpi: int = 90) -> str:
+    """Animate the side-on VV rocking on its two 15° dual-hinge 4-bar supports
+    about the virtual pivot P.  Lateral sway exaggerated ~×400 for visibility."""
+    P, (G1, V1, G2, V2) = _rk_pivot()
+    hinges_R = {
+        +1: (G1, V1, G2, V2),
+        -1: (G1 * [-1, 1], V1 * [-1, 1], G2 * [-1, 1], V2 * [-1, 1]),
+    }
+    vessel_outer = _superellipse(9.0, 4.6, _RK_ZC)
+    vessel_inner = _superellipse(4.4, 2.0, _RK_ZC)
+    cog_rest = np.array([0.0, _RK_ZC])
+    attach_rest = np.array([V1, V1 * [-1, 1]])
+
+    # rock amplitude: real CoG sway ~ +/-1.5 mm; exaggerate ~x400 -> ~+/-0.6 m
+    L_eff_vis = P[1] - cog_rest[1]
+    sway_m = 0.6
+    beta0 = sway_m / L_eff_vis
+    phase = np.linspace(0, 2 * np.pi, n_frames, endpoint=False)
+    betas = beta0 * np.sin(phase)
+
+    fig, ax = plt.subplots(figsize=(7.0, 9.4), facecolor="white")
+    fig.subplots_adjust(left=0.02, right=0.98, top=0.99, bottom=0.01)
+
+    def draw(k):
+        _draw_rocking_frame(ax, betas[k], P, hinges_R, vessel_outer, vessel_inner,
+                            cog_rest, attach_rest)
+
+    anim = FuncAnimation(fig, draw, frames=n_frames, interval=1000 // fps)
+    out = os.path.join(DIAGRAMS_DIR, "D_rocking_pendulum.gif")
+    anim.save(out, writer="pillow", fps=fps, dpi=dpi)
+    plt.close(fig)
+    return out
+
+
+def preview_rocking(out="/tmp/rocking_preview.png") -> str:
+    """5-frame strip for visual QA (not committed)."""
+    P, (G1, V1, G2, V2) = _rk_pivot()
+    hinges_R = {
+        +1: (G1, V1, G2, V2),
+        -1: (G1 * [-1, 1], V1 * [-1, 1], G2 * [-1, 1], V2 * [-1, 1]),
+    }
+    vessel_outer = _superellipse(9.0, 4.6, _RK_ZC)
+    vessel_inner = _superellipse(4.4, 2.0, _RK_ZC)
+    cog_rest = np.array([0.0, _RK_ZC])
+    attach_rest = np.array([V1, V1 * [-1, 1]])
+    L_eff_vis = P[1] - cog_rest[1]
+    beta0 = 0.6 / L_eff_vis
+    fig, axes = plt.subplots(1, 5, figsize=(26, 9.4), facecolor="white")
+    for ax, b in zip(axes, np.linspace(-beta0, beta0, 5)):
+        _draw_rocking_frame(ax, b, P, hinges_R, vessel_outer, vessel_inner,
+                            cog_rest, attach_rest)
+    fig.savefig(out, dpi=70, bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+    return out
+
+
 # ── HTML report ─────────────────────────────────────────────────────────────
 CSS = """
 body{font-family:'Segoe UI',system-ui,sans-serif;max-width:1100px;margin:0 auto;padding:1.5rem 2rem;color:#222;line-height:1.55}
@@ -321,15 +502,35 @@ def write_html() -> str:
     K15  = K_kN_per_mm(INCL_DEG)
     T15  = Tn(INCL_DEG)
 
+    summary = (f"First-principles derivation of VVGS lateral gravitational centring: nine "
+               f"inward-inclined (15deg) dual-hinge 4-bar supports form an inclined-hinge "
+               f"pendulum, virtual pivot above the CoG, L_eff~{L15:.0f}m, K~{K15:.1f} kN/mm, "
+               f"T~{T15:.0f}s. Side-on rocking GIF of the 4-bar mechanism. Companion to the "
+               f"lateral-displacement analysis.")
     body = f"""<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ITER VVGS Gravitational Centring — Mechanism, Geometry &amp; Confidence</title>
+<meta name="docs-project" content="vv">
+<meta name="plan-slug" content="vvgs-pendulum-mechanism">
+<meta name="plan-title" content="ITER VVGS Gravitational Centring — Mechanism, Geometry & Confidence">
+<meta name="plan-status" content="shipped">
+<meta name="plan-roi" content="mid">
+<meta name="plan-effort" content="M">
+<meta name="plan-tier" content="opus">
+<meta name="plan-summary" content="{summary}">
+<meta name="plan-informs" content="vv-lateral-displacement-analysis">
+<title>ITER VVGS Gravitational Centring — Mechanism, Geometry &amp; Confidence · vv</title>
+<link rel="stylesheet" href="/_shared/foundation.css">
+<link rel="stylesheet" href="/_shared/dashboard.css">
 <style>{CSS}</style>
+<meta name="reckon-type" content="plan">
+<meta name="plan-modified" content="2026-06-15">
+<meta name="plan-version" content="3">
 </head>
 <body>
+<main class="plan-doc">
 <h1>ITER VVGS Gravitational Centring — Mechanism, Geometry &amp; Confidence</h1>
 <p style="color:#555;font-size:.95em;margin-bottom:.3em">
 <span class="author">Simon McIntosh</span> &nbsp;·&nbsp; 2026-05-28 &nbsp;·&nbsp;
@@ -351,7 +552,7 @@ remaining holes are.
 
 <p>Each VVGS strut is a near-vertical link whose axis is tilted <strong>α = 15°</strong>
 from vertical, leaning inward. Its ground anchor sits at radius
-<strong>R<sub>s</sub> ≈ 8 m</strong> on a horizontal support ring under the lower ports.
+<strong>R<sub>s</sub> ≈ {R_S:.0f} m</strong> on a horizontal support ring under the lower ports.
 Extending the strut's central axis upward, it meets the vertical machine axis at a height</p>
 
 <pre>h(α) = R<sub>s</sub> / tan(α)</pre>
@@ -364,7 +565,7 @@ length is then</p>
 <pre>L<sub>eff</sub>(α) = h(α) − z<sub>CoG</sub> = R<sub>s</sub> / tan(α) − z<sub>CoG</sub>.</pre>
 
 <figure>
-  <img src="diagrams/A_single_strut.png" alt="Single strut + convergence point">
+  <img src="/vv/diagrams/A_single_strut.png" alt="Single strut + convergence point">
   <figcaption><strong>Diagram A.</strong> A single inclined VVGS strut. The thick blue
   segment is the physical strut between its ground anchor (at radius R<sub>s</sub>) and
   the vessel attachment. The dashed blue line is its <em>extended</em> axis — produced
@@ -387,7 +588,7 @@ can only execute small motions that look like a rotation about P. P is the syste
 from P to the centre of gravity.</p>
 
 <figure>
-  <img src="diagrams/B_virtual_pivot.png" alt="Multi-strut virtual pivot">
+  <img src="/vv/diagrams/B_virtual_pivot.png" alt="Multi-strut virtual pivot">
   <figcaption><strong>Diagram B.</strong> Cross-section through the machine axis, showing
   two inclined struts (one on either side). Each strut's axis, extended (dashed), reaches
   the same convergence point <span style="color:#cc2200">P</span>; this is true for all
@@ -407,6 +608,20 @@ L<sub>eff</sub> ≈ {L15:.1f} m, K ≈ {K15:.2f} kN/mm and a natural period
 T<sub>n</sub> ≈ {T15:.1f} s — a <em>soft</em> pendulum because the geometry forces
 L<sub>eff</sub> to be long.</p>
 
+<figure>
+  <img src="/vv/diagrams/D_rocking_pendulum.gif" alt="Side-on VV rocking on its 15-degree dual-hinge 4-bar supports">
+  <figcaption><strong>Animation D.</strong> The mechanism in motion, viewed side-on
+  (poloidal R–Z plane). Each VVGS is drawn as its actual <strong>15° inclined dual-hinge
+  (parallelogram) 4-bar</strong> — two parallel links between a fixed ground block and the
+  moving vessel block. Extended, the strut axes converge at the virtual pivot
+  <span style="color:#cc2200">P</span> (here derived from the 15° geometry), and the rigid
+  vessel <strong>rocks about P as a gravitational pendulum</strong> of length
+  L<sub>eff</sub> ≈ 26–32 m (set by the estimated CoG height — see §4). As it sways, the parallel links swing
+  about their ground hinges and the CoG (X) feels a gravitational restoring force toward the
+  machine axis. <em>Lateral sway is exaggerated ~×400 for visibility</em> — the real at-rest
+  excursion is sub-millimetre.</figcaption>
+</figure>
+
 <!-- ═══════════════════════════════════════════════════════════ §3 -->
 <h2 id="s3">§3 — L<sub>eff</sub> as a function of inclination angle</h2>
 
@@ -414,7 +629,7 @@ L<sub>eff</sub> to be long.</p>
 z<sub>CoG</sub>. Sweeping α gives the curve below.</p>
 
 <figure>
-  <img src="diagrams/C_Leff_vs_angle.png" alt="L_eff vs alpha and K vs alpha">
+  <img src="/vv/diagrams/C_Leff_vs_angle.png" alt="L_eff vs alpha and K vs alpha">
   <figcaption><strong>Diagram C.</strong> The effective pendulum length L<sub>eff</sub>
   (blue, left axis) and the corresponding lateral stiffness K = W/L<sub>eff</sub> (red,
   dashed, right axis) as a function of strut inclination α. Three regimes are marked:
@@ -438,7 +653,7 @@ support attachment. With z<sub>CoG</sub> ≈ {Z_COG:.0f} m the effective pendulu
 L<sub>eff</sub> ≈ {L45:.1f} m — about an order of magnitude shorter than at 15°. The
 stiffness K = W/L<sub>eff</sub> rises by the same factor and the natural period drops to
 T<sub>n</sub> ≈ {Tn(45):.1f} s. This is a much stiffer pendulum: a more strongly centred
-vessel, but a strut tilt that would be impractical for a gravity support carrying ~8000 t.
+vessel, but a strut tilt that would be impractical for a gravity support carrying ~{M_TONNES:.0f} t.
 The 15° design value is a deliberate balance between centring stiffness and structural
 practicality.</p>
 
@@ -464,7 +679,7 @@ moderate uncertainty from the parameters we have estimated rather than measured.
 <tr><th>Statement</th><th>Confidence</th><th>Why</th></tr>
 <tr><td>The 15° inward inclination provides a centring force</td><td>HIGH</td><td>Stated explicitly in the ITER VVGS literature as design intent (see §5).</td></tr>
 <tr><td>The mechanism is a stable (not inverted) pendulum at α = 15°</td><td>HIGH</td><td>Pure geometry: P sits ~30 m above the CoG, far above α<sub>crit</sub>.</td></tr>
-<tr><td>L<sub>eff</sub> ≈ 26 m, K ≈ 3 kN/mm, T<sub>n</sub> ≈ 10 s</td><td>MODERATE</td><td>Sensitive to z<sub>CoG</sub> (estimated) and to the exact link geometry.</td></tr>
+<tr><td>L<sub>eff</sub> ≈ {L15:.0f} m, K ≈ {K15:.1f} kN/mm, T<sub>n</sub> ≈ {T15:.0f} s</td><td>MODERATE</td><td>Sensitive to z<sub>CoG</sub> (estimated) and to the exact link geometry; K ranges ~2.7–3.2 kN/mm over z<sub>CoG</sub> = 5–10 m.</td></tr>
 <tr><td>Linear/harmonic small-displacement model</td><td>HIGH</td><td>L<sub>eff</sub> ≫ 1.5 mm gap — nonlinear corrections are ppm.</td></tr>
 <tr><td>2-D lateral mode captures the n = 1 first-wall shift</td><td>HIGH</td><td>The other rigid-body modes are either irrelevant (n = 0 rotation) or strongly constrained.</td></tr>
 </table>
@@ -494,8 +709,9 @@ make the from-vertical reading by far the more natural one, and the literature's
 ("stable equilibrium") only makes sense in that case — but the precise angular reference
 should be confirmed against the engineering drawing.</li>
 
-<li><strong>Supported mass M.</strong> We use M ≈ 8000 t for VV + in-vessel components. The
-VV alone is ~5200 t; the full in-vessel set adds up to the 8–9 kt range. K = W/L<sub>eff</sub>
+<li><strong>Supported mass M.</strong> We use M ≈ {M_TONNES:.0f} t for VV + in-vessel components
+(ITER VV Load Spec + mass table, ITER_D_6TLUDY). The VV alone is ~5200 t; the full in-vessel set
+brings it to the ~9 kt range. K = W/L<sub>eff</sub>
 scales with M, so K could be 15–20 % softer if a smaller effective M (say only the VV)
 actually moves with the lateral mode.</li>
 
@@ -550,7 +766,7 @@ inclined-strut / virtual-pivot result, applied to a configuration that ITER has
 deliberately designed for centring (per the published structural-analysis literature on
 the VVGS). The qualitative claim — vessel self-centres in a stable pendulum well with
 a long L<sub>eff</sub> and a soft natural frequency — is on firm ground. The numerical
-values (L<sub>eff</sub> ≈ 26 m, K ≈ 3 kN/mm, T<sub>n</sub> ≈ 10 s) are accurate to roughly
+values (L<sub>eff</sub> ≈ {L15:.0f} m, K ≈ {K15:.1f} kN/mm, T<sub>n</sub> ≈ {T15:.0f} s) are accurate to roughly
 ±20 % given the estimated z<sub>CoG</sub> and supported mass; pinning them more tightly
 needs the as-built hinge geometry and the lateral mass that actually moves with the n=1
 mode.
@@ -562,6 +778,7 @@ Author: <span class="author">Simon McIntosh</span>. Diagrams generated by
 <code>build_pendulum_explainer.py</code>; the geometry is parametric in R<sub>s</sub>,
 α and z<sub>CoG</sub>. Source: <code>Simon-McIntosh/vv</code>.
 </p>
+</main>
 </body>
 </html>
 """
@@ -571,11 +788,14 @@ Author: <span class="author">Simon McIntosh</span>. Diagrams generated by
     return out
 
 
-def main():
+def main(make_gif: bool = True):
     print("Generating diagrams …")
     print(" ", diagram_a())
     print(" ", diagram_b())
     print(" ", diagram_c())
+    if make_gif:
+        print("Generating rocking-pendulum GIF …")
+        print(" ", gif_rocking_pendulum())
     print("Writing HTML …")
     print(" ", write_html())
 
