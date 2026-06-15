@@ -528,6 +528,7 @@ def write_html() -> str:
 <meta name="reckon-type" content="plan">
 <meta name="plan-modified" content="2026-06-15">
 <meta name="plan-version" content="3">
+<meta name="plan-impl" content="1.0">
 </head>
 <body>
 <main class="plan-doc">

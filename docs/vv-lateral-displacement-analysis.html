@@ -10,7 +10,7 @@
 <meta name="plan-roi" content="high">
 <meta name="plan-effort" content="L">
 <meta name="plan-tier" content="opus">
-<meta name="plan-summary" content="Canonical n=1 first-wall metric: max lateral displacement of the VV centre from the gravitational centre. Nominal 1.55mm; MC (5k, scipy HiGHS LP) P95 2.27mm, max 2.98mm. VVGS 15deg gravitational centring (K~3kN/mm, T~10s); start-up favourable (self-aligning); disruption ~1MN / ~12mm/s is the bounding VVGS lateral case. Word + HTML deliverable.">
+<meta name="plan-summary" content="Two bounds for the VV n=1 first-wall shift, selected by friction: frictionless self-centring (departure-from-centre, nominal 1.55mm) vs realistic stiction-walk (polytope WIDTH, ceiling 3.09mm ~ half the 6mm budget). Per-VVGS dead-weight axial ~10MN, toroidal stiction ~1MN, aggregate breakaway ~5.7MN &gt;&gt; ~4kN gravitational restoring (~1000x) -&gt; the vessel does NOT self-centre and ratchets within the polytope under disruption/VDE loads. Thermal cycling does not recentre it (off-centre toroidal demand ~um &lt;&lt; MN stiction); asymmetric thermal gradients give locked-in loads on the overdetermined 9-support ring. Gap distribution unvalidated -&gt; MC percentiles illustrative; measure the 9 gaps with feeler gauges. R_s=10m, M=9000t (ITER_D_6TLUDY). Reproducible (vv_mechanics.py, vv_rattle_figures.py); HTML+Word; 4-bar rocking GIF.">
 <meta name="plan-informs" content="vv-rattle-plan">
 <title>ITER VV Lateral Displacement Analysis · vv</title>
 <link rel="stylesheet" href="/_shared/foundation.css">
@@ -40,7 +40,7 @@ pre{background:#f5f5f5;border:1px solid #ddd;border-radius:4px;padding:.8em 1em;
 </style>
 <meta name="reckon-type" content="plan">
 <meta name="plan-modified" content="2026-06-15">
-<meta name="plan-version" content="2">
+<meta name="plan-version" content="3">
 <meta name="plan-impl" content="1.0">
 </head>
 <body>
@@ -605,6 +605,33 @@ T<sub>n</sub> ≈ 11 s, F<sub>stop</sub> ≈ 4.1 kN; per-VVGS dead-weight axial 
 breakaway ≈ 1 MN. Every number regenerates from the repository.
 Source: <code>Simon-McIntosh/vv</code>.
 </p>
+<section data-reckon="followups" id="followups" class="r-followups">
+<h2><span class="sec">§</span> Followups</h2>
+<article class="r-fu" data-id="f-thermal-vvls" data-status="open" data-tier="opus" data-written-by="smc" data-written-at="2026-06-15" data-recommends-skill="/reckon-ship vv-lateral-displacement-analysis" data-resolved-at="" data-resolved-by="">
+    <h4 class="r-fu-title">FE thermal-asymmetry loads, VVLS disruption loads, and a gap-measurement campaign</h4>
+    <div class="r-fu-body">The analysis establishes that the vessel walks (does not self-centre) and that thermal cycling does not recentre it. Three open items remain to harden the conclusions for the engineering review: (1) the locked-in self-stress from asymmetric thermal fields on the overdetermined ring needs an FE model; (2) the bounding disruption/VDE toroidal VVGS force should be read from the VV Load Specification (VVLS) rather than the order-of-magnitude estimate; (3) the unvalidated gap prior should be replaced by direct feeler-gauge measurement of the 9 gaps.</div>
+    <pre class="r-fu-prompt">Project: vv
+Plan: vv-lateral-displacement-analysis
+Tier: opus
+
+Context
+  The report (HTML + docx) now carries two bounds: frictionless self-centring (lower bound) and the realistic stiction-walk bound (polytope width ~3.09mm). Stiction (~1MN/support, ~5.7MN aggregate breakaway) overwhelms gravitational restoring (~4kN) by ~1000x, so the vessel walks and thermal cycling does not recentre it. Three items remain open.
+
+State to read
+  docs/vv-lateral-displacement-analysis.html (sections 8-13), vv_mechanics.py (force/thermal ledger), vv_viz.py / vv_rattle_figures.py (LP + width metric).
+
+Scope / constraints
+  - Pull the bounding disruption/asymmetric-VDE net horizontal VV load and the per-VVGS toroidal force from the VV Load Specification (ITER_D_6TLUDY and the VVLS); replace the MN-to-tens-of-MN placeholder in section 8 with referenced values.
+  - Build a thermo-mechanical estimate (analytic or FE) of the locked-in toroidal dowel loads from realistic support-to-support temperature gradients on the stiction-locked, statically overdetermined 9-support ring; compare to the VVGS toroidal capacity.
+  - Recommend / specify the feeler-gauge gap-measurement campaign that collapses the kinematics to a deterministic calculation; show how the conditional bound tightens per measured sector (section 6).
+
+Done-when
+  1. Section 8 cites VVLS load values; the locked-in thermal-load estimate is added with a figure.
+  2. A measurement spec (which gaps, accuracy, how the polytope is recomputed) is written.
+  3. vv_mechanics.py extended with the thermal-asymmetry load model; numbers regenerate.
+  4. Report HTML + docx + reckon summary updated; this followup resolved.</pre>
+    </article>
+</section>
 </main>
 </body>
 </html>

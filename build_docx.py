@@ -245,30 +245,37 @@ def main():
 
     sub = doc.add_paragraph()
     sr = sub.add_run("5,000-sample Monte Carlo  ·  scipy HiGHS LP  ·  3-DOF rigid-body model  ·  "
-                     "metric: max lateral displacement of the VV centre from the gravitational "
-                     "centre (n = 1 first-wall shift)")
+                     "two metrics: departure-from-centre (frictionless) and polytope width "
+                     "(stiction walk)  ·  R_s ≈ 10 m, M ≈ 9000 t (ITER_D_6TLUDY)")
     sr.font.size = Pt(8.5); sr.font.color.rgb = GREY
 
     # ── Summary of findings ─────────────────────────────────────────────────
-    callout(doc, "info", [
-        ("The vacuum vessel rests on 9 inward-inclined gravity supports whose 15° tilt "
-         "provides a gravitational centring force in the lateral plane: ", False),
-        ("the vessel self-centres at rest and departs from the machine axis only under an "
-         "applied lateral force", True),
-        (". The natural period of this pendulum is ≈ 10 s.\n\n", False),
-        ("• The n = 1 first-wall metric is the maximum lateral displacement of the VV centre "
-         "from the machine axis. Nominal envelope 1.55 mm; across the assembly population "
-         f"(Monte Carlo, §5) P95 = {p95:.2f} mm, max = {rmax:.2f} mm; at-rest contribution = 0.\n",
+    callout(doc, "key", [
+        ("The vessel rests on nine inward-inclined (15°) gravity supports that form a soft "
+         "lateral gravitational pendulum (K ≈ 2.7 kN/mm, T_n ≈ 11 s). Whether the vessel "
+         "actually self-centres is decided by friction, and that selects between two bounds:\n\n",
          False),
-        ("• Start-up (0 → 3 MA in 10 s) is favourable. Passive vessel currents pull the wall "
-         "toward the offset toroidal-field magnetic centre; any motion during the ramp "
-         "reduces the n ≤ 4 first-wall–field misalignment.\n", False),
-        ("• Disruption is the bounding VVGS lateral load case. An MN-scale lateral impulse "
-         "over ms gives ~12 mm/s impact velocity at the dowel stops and ~1 MN peak lateral "
-         "force on the VVGS — much larger than steady operation.\n", False),
-        ("• Gap measurements tighten the bound. Each measured u_i pulls the displacement "
-         "polytope toward the centre; with all 9 measured and near-centred the bound "
-         "collapses to the 1.55 mm nominal envelope.", False),
+        ("• Frictionless lower bound — self-centring (§3–§6). ", True),
+        ("If the supports slid freely the vessel would return to the gravitational centre at "
+         "rest (≈ 0 contribution to the n = 1 shift); only forced excursions would reach the "
+         f"departure envelope — nominal 1.55 mm, distribution-dependent tail to ~{rmax:.1f} mm.\n",
+         False),
+        ("• Realistic bound — stiction walk (§10). ", True),
+        ("Dead-weight axial load per VVGS ≈ 10 MN; even with low-friction hinges the toroidal "
+         "breakaway is ≈ 1 MN per support (≈ 5.7 MN for the whole vessel) — roughly 1000× the "
+         "≈ 4 kN gravitational restoring. Gravity cannot recentre the vessel: once a disruption/"
+         "VDE load slides it, it stays, and over many events it ratchets within the polytope. "
+         "The relevant n = 1 envelope is the polytope width ≈ 3.1 mm (§9) — about half the 6 mm "
+         "budget.\n", False),
+        ("• Thermal cycling does not recentre it (§11). ", True),
+        ("Warming to 100 °C grows the vessel radially ~12 mm (freely accommodated), but the "
+         "off-centre toroidal demand is only ~µm — far too small to break the MN-scale stiction.\n",
+         False),
+        ("• The statistics are only as good as the gap distribution (§12). ", True),
+        ("The Uniform(±1.5 mm) prior is not validated, so the MC percentiles are illustrative. "
+         "The robust results are the distribution-free bounds and the force comparison. "
+         "Measuring the nine gaps with feeler gauges collapses the problem to a deterministic "
+         "calculation and is the recommended path.", False),
     ], title="Summary of findings:")
 
     # ── §1 — Problem & Assumptions ──────────────────────────────────────────
@@ -276,7 +283,7 @@ def main():
     body(doc, [
         ("The vacuum vessel rests on ", False),
         ("nine gravity supports (VVGS)", True),
-        (" equally spaced toroidally beneath the lower ports, on a ring of radius R_s ≈ 8 m. "
+        (" equally spaced toroidally beneath the lower ports, on a ring of radius R_s ≈ 10 m. "
          "Each VVGS is a ", False),
         ("dual-hinge mechanism inclined at 15° from vertical", True),
         (", leaning inward toward the machine axis. Radial motion of the vessel is permitted "
@@ -288,10 +295,10 @@ def main():
     ])
     table(doc, ["Parameter", "Value", "Note"], [
         ["Number of supports", "9", "Equally spaced toroidally"],
-        ["Support ring radius R_s", "8 m", ""],
+        ["Support ring radius R_s", "≈ 10 m", "ITER_D_6TLUDY (VV Load Spec)"],
         ["Toroidal slot per support", "±1.5 mm (3 mm total)", "Assembly tolerance (see below)"],
         ["Hinge inclination from vertical", "15°", "Inward (centring)"],
-        ["Supported mass M", "≈ 8000 t", "VV + in-vessel components"],
+        ["Supported mass M", "≈ 9000 t", "VV + in-vessel (ITER_D_6TLUDY)"],
     ])
 
     heading3(doc, "Assembly assumption — the source of mobility")
@@ -311,14 +318,17 @@ def main():
          "drives the analysis.", False),
     ])
     body(doc, [
-        ("We model the as-built state with the conservative prior that each support's pin "
+        ("For the Monte-Carlo sections (§5–§6) we adopt the prior that each support's pin "
          "offset u_i is ", False),
         ("independent across the 9 supports", True),
         (" and ", False),
         ("uniformly distributed on [−1.5 mm, +1.5 mm]", True),
-        (". This is the prior used in the Monte Carlo of §5. (Shimming a support fixes its "
-         "u_i to a measured value and removes that support's contribution to the mobility — "
-         "see §6.)", False),
+        (". This prior is not validated", True),
+        (" — neither the uniform shape nor the ±1.5 mm range is established (§12) — so the "
+         "resulting percentiles are illustrative, and the load-bearing conclusions of this "
+         "report are deliberately the distribution-free ones (the kinematic bounds and the "
+         "force comparison). Shimming a support fixes its u_i to a measured value and removes "
+         "that support's contribution to the mobility (§6).", False),
     ])
 
     heading3(doc, "Gravitational centring")
@@ -328,20 +338,28 @@ def main():
          "behaves as if suspended from that convergence point — an ", False),
         ("inclined-hinge gravitational pendulum", True),
         (" — and the lateral plane has a parabolic potential well centred on the nominal "
-         "position. The effective pendulum length is L_eff ≈ R_s / tan(15°) − z_CoG ≈ 26 m "
-         "(sensitive to angle: ~2 m per degree).", False),
+         "position. The effective pendulum length is L_eff ≈ R_s / tan(15°) − z_CoG ≈ 32 m "
+         "(≈ 26–32 m over the estimated z_CoG = 5–10 m range).", False),
     ])
     table(doc, ["Quantity", "Value"], [
-        ["Lateral centring stiffness", "K ≈ 3.0 kN / mm"],
-        ["Natural period", "T_n ≈ 10 s   (f ≈ 0.1 Hz)"],
-        ["Force to push the vessel to a ±1.5 mm stop", "F_stop ≈ 4.5 kN"],
-        ["Rest position with no lateral force", "q* = 0 (centred)"],
+        ["Lateral centring stiffness", "K ≈ 2.7 kN / mm"],
+        ["Natural period", "T_n ≈ 11 s   (f ≈ 0.09 Hz)"],
+        ["Gravitational force to push the vessel to a ±1.5 mm stop", "F_stop ≈ 4.1 kN"],
+        ["Rest position with no lateral force (frictionless)", "q* = 0 (centred)"],
     ])
     callout(doc, "info", [
-        ("Without an applied lateral force the vessel sits at the gravitational centre, "
-         "regardless of the assembly offsets. The pins simply occupy their respective u_i "
-         "positions in the slots; the vessel itself is on-axis.", False),
-    ], title="Consequence.")
+        ("With no friction, and no applied lateral force, the vessel would sit at the "
+         "gravitational centre regardless of the assembly offsets — this is the lower-bound "
+         "picture of §3–§6. §10 shows that dead-weight friction at the supports is ~1000× the "
+         "centring force, so in reality the vessel does not return to centre once displaced; it "
+         "holds its last position. Both bounds are carried through this report.", False),
+    ], title="Consequence — in the frictionless idealisation.")
+    figure(doc, os.path.join(DOCS, "diagrams", "D_rocking_pendulum.gif"),
+           "The mechanism, side-on. Each VVGS is its actual 15° inclined dual-hinge "
+           "(parallelogram) 4-bar; extended, the strut axes converge at the virtual pivot P, "
+           "and the rigid vessel rocks about P as a soft gravitational pendulum (lateral sway "
+           "exaggerated ~×400). This restoring mechanism is ~1000× too weak to overcome the "
+           "supports' dead-weight stiction (§10).", width=3.6)
 
     # ── §2 — Constraint Model, Polytope & Linear Programming ────────────────
     heading2(doc, "2 — Constraint Model, Polytope & Linear Programming")
@@ -353,7 +371,7 @@ def main():
         ("). Each of the nine supports imposes a single linear inequality constraint: the "
          "toroidal slide of the vessel relative to its dowel must stay within the ±1.5 mm "
          "slot. For support i at toroidal angle φ_i = π/2 − 2πi/9 on the support ring at "
-         "radius R = 8 m, the slide is", False),
+         "radius R = 10 m, the slide is", False),
     ])
     pre(doc,
         "  δᵢ = −sin(φᵢ)·Δx + cos(φᵢ)·Δy + R·Δθ   ≡   A[i, :] · q ,\n"
@@ -362,7 +380,7 @@ def main():
         ("so the displacement is bounded by ", False),
         ("18 linear inequalities", True),
         (" (one upper and one lower bound per support). The 9×3 constraint matrix has ", False),
-        ("AᵀA = diag(4.5, 4.5, 576)", True),
+        ("AᵀA = diag(4.5, 4.5, 900)", True),
         (" — exactly diagonal, so the three rigid-body DOFs are mutually uncorrelated.", False),
     ])
     callout(doc, "info", [
@@ -454,12 +472,17 @@ def main():
         ["P99", f"{p99:.2f}"],
         ["Max observed (n = 5000)", f"{rmax:.2f}"],
     ])
-    callout(doc, "info", [
-        ("Quiescent (no lateral force) the vessel sits at the gravitational centre and "
-         "contributes zero to the n = 1 first-wall shift. Under sufficient applied force the "
-         "vessel can be displaced up to the polytope boundary; the MC quantifies that "
-         "kinematic ceiling over the assembly distribution.", False),
-    ])
+    callout(doc, "warn", [
+        ("The Monte-Carlo percentiles above are only as trustworthy as the assumed input "
+         "distribution. We drew each support offset from Uniform(−1.5 mm, +1.5 mm) "
+         "independently, but neither the uniform shape nor the ±1.5 mm range is validated — "
+         "the as-built gaps are set by assembly history, not by a known random process. The "
+         "P95/P99 figures therefore carry low confidence and are illustrative. What does not "
+         "depend on the distribution are (i) the nominal centred envelope (1.55 mm), (ii) the "
+         "polytope-width ceiling (§9), and (iii) the stiction-vs-centring force comparison "
+         "(§10). The recommendation (§12) is to measure the nine gaps with feeler gauges "
+         "rather than propagate an unvalidated prior.", False),
+    ], title="Reliability caveat — read the percentiles with caution.")
 
     # ── §6 — Effect of Gap Measurements ─────────────────────────────────────
     heading2(doc, "6 — Effect of Gap Measurements")
@@ -516,74 +539,246 @@ def main():
          "B_T ≈ 5 T, fractional n = 1 field error ε ~ 10⁻⁴–10⁻³, and a toroidal length scale "
          "~ 2πR, the lateral force F_ramp ~ ε · I_vv · B_T · L is of order ", False),
         ("1–10 kN", True),
-        (" — comparable to the F_stop ≈ 4.5 kN centring threshold. The ramp duration (10 s) "
-         "is comparable to the pendulum natural period (T_n ≈ 10 s), so the dynamic response "
-         "factor for a single (non-periodic) ramp is ~1.3–1.5; the quasi-static deflection "
-         "F/K = 0.3–3 mm becomes a peak transient excursion of order ", False),
+        (". This is comparable to the gravitational centring threshold F_stop ≈ 4.1 kN but is "
+         "far below the ≈ 1 MN per-support toroidal breakaway force (§10): a kN-scale start-up "
+         "force does not slide the supports at all. The ramp duration (10 s) is comparable to "
+         "the pendulum natural period (T_n ≈ 11 s), so in the frictionless idealisation the "
+         "quasi-static deflection F/K = 0.4–4 mm would appear as a peak transient excursion of "
+         "order ", False),
         ("1–4 mm", True),
-        (". Combined with the favourable direction above, a defensible peak start-up "
-         "wall–field n = 1 mismatch from this source is below the kinematic ceiling — a "
-         "detailed EM transient is required to pin the precise value.", False),
+        (" in the favourable (self-aligning) direction. In the realistic stiction-dominated "
+         "picture the start-up force is orders of magnitude below breakaway, so it produces no "
+         "net lateral motion — it neither erodes nor relieves the budget kinematically. Either "
+         "way this source is not budget-limiting; a detailed EM transient is required to pin "
+         "the precise value.", False),
     ])
 
     # ── §8 — Disruption Loads & VVGS Impact Case ───────────────────────────
     heading2(doc, "8 — Disruption Loads & VVGS Impact Case")
     body(doc, [
-        ("A current quench delivers an MN-scale lateral impulse to the vessel over ~10 ms — "
-         "far faster than the 10 s vessel pendulum period and far larger than the kN-scale "
-         "centring force. On this timescale the vessel responds essentially as a ", False),
-        ("free mass", True),
-        (":", False),
+        ("Disruptions and asymmetric vertical displacement events (VDEs) deliver the large "
+         "lateral loads. ", False),
+        ("The bounding magnitudes and durations are defined in the ITER VV Load Specification "
+         "(VVLS)", True),
+        (" and are substantially larger than the illustrative impulse used in an earlier draft "
+         "of this note; the values below are order-of-magnitude only and should be taken from "
+         "the VVLS for design.", False),
     ])
-    pre(doc,
-        "  impulse   J = ∫F dt   ~  (10 MN)·(10 ms)        ≈  10⁵ N·s\n"
-        "  velocity  v = J / M  ~  10⁵ / 8×10⁶ kg          ≈  12  mm/s\n"
-        "  amplitude (free)  A = v / ω  ~  v·Tₙ / 2π         ≈  20 mm   (≫ 1.5 mm gap)")
+    callout(doc, "warn", [
+        ("An earlier version quoted a lateral impulse J ~ 10⁵ N·s over ~10 ms (free-mass "
+         "velocity ~12 mm/s). Both the magnitude and the duration are lower than the VVLS "
+         "bounding values, so the resulting toroidal VVGS force was correspondingly "
+         "under-stated. The VVLS net horizontal VV loads are of order MN to tens of MN.", False),
+    ], title="Correction.")
+    body(doc, [
+        ("Two regimes follow from the friction analysis (§10), with breakaway ≈ 5.7 MN "
+         "aggregate (≈ 1 MN per support):", False),
+    ])
+    body(doc, [
+        ("• Small / illustrative impulse (below breakaway). ", True),
+        ("The earlier J ~ 10⁵ N·s carries kinetic energy ½Mv² ≈ 0.56 kJ (M ≈ 9000 t). The "
+         "friction work over a full 3 mm slide is ≈ 5.7 MN × 3 mm ≈ 17 kJ ≫ 0.56 kJ, so such "
+         "an impulse would move the vessel only ~0.1 mm before stiction arrests it — there is "
+         "no free-flight impact on the stops, contrary to the earlier free-mass picture.", False),
+    ])
+    body(doc, [
+        ("• VVLS bounding loads (above breakaway). ", True),
+        ("Net horizontal loads of MN-to-tens-of-MN exceed the ≈ 5.7 MN breakaway, so the "
+         "vessel does slide during major events. Each event displaces it by an amount set by "
+         "the load, the impulse and the remaining slot; the displacement is retained (gravity "
+         "cannot pull it back, §10). Repeated events make the vessel ratchet within the "
+         "polytope (§9–§10).", False),
+    ])
     callout(doc, "key", [
-        ("For a rigid stop the peak lateral force on the VVGS is on the order of ", False),
-        ("~1 MN", True),
-        (" — much larger than the steady gravity-related lateral demand on the support. This "
-         "is an ", False),
-        ("impulsive load case for the VVGS lateral capacity", True),
-        (", distinct from steady operation, and is potentially the ", False),
-        ("bounding load case for VVGS lateral design", True),
-        (". The soft (kN-scale) centring provides essentially no deceleration before impact.",
+        ("— and it is the mechanism that drives the vessel away from the gravitational centre "
+         "toward the polytope-width bound. Its magnitude must be read from the VVLS; the "
+         "analysis here establishes the consequence (irreversible walk), not the load value.",
          False),
-    ], title="The vessel impacts the dowel stops at ~12 mm/s with ~0.5 kJ of kinetic energy.")
+    ], title="The disruption/VDE toroidal force is the bounding VVGS lateral load case")
 
-    # ── §9 — The 6 mm n ≤ 4 First-Wall Budget ──────────────────────────────
-    heading2(doc, "9 — The 6 mm n ≤ 4 First-Wall Budget")
+    # ── §9 — Maximum Rattle: the Polytope-Width Bound ──────────────────────
+    heading2(doc, "9 — Maximum Rattle: the Polytope-Width Bound")
+    body(doc, [
+        ("§3–§6 measured the departure from the gravitational centre — the right metric if "
+         "the vessel self-centres. This section measures the complementary quantity: the ",
+         False),
+        ("full peak-to-peak width of the displacement polytope", True),
+        (" (its diameter along the worst direction). The width is the total lateral travel "
+         "available to the vessel — the kinematic ceiling on how far it can walk if friction "
+         "(not gravity) sets its rest position (§10).", False),
+    ])
+    callout(doc, "info", [
+        ("Departure-from-centre is minimised at the centred assembly (u = 0 → 1.55 mm) and "
+         "grows for offset assemblies. The polytope width is maximised at the centred assembly "
+         "and shrinks for offset assemblies, so the worst-case width is the nominal one. "
+         "Nominal width = 3.09 mm (distribution-free ceiling); over the assembly population: "
+         "median 2.24 mm, P5 1.19 mm, minimum 0.21 mm — a typical as-built assembly has a "
+         "narrower reachable envelope than nominal.", False),
+    ], title="Width and departure behave oppositely.")
+    figure(doc, os.path.join(DOCS, "plots", "rattle_dashboard.png"),
+           "Distribution (left) and CDF (right) of the polytope width (peak-to-peak rattle) "
+           "over 5000 assemblies. The nominal (u = 0) width 3.09 mm is the ceiling; offset "
+           "assemblies are more constrained and sit below it. The shape inherits the "
+           "unvalidated gap prior (§12), but the ceiling is distribution-free.")
+    figure(doc, os.path.join(DOCS, "animations", "rattle_width_nominal.gif"),
+           "The nominal assembly swept across the full polytope width (×500). The VV centre "
+           "travels the complete ±1.55 mm diameter; the coloured pins show the toroidal-slot "
+           "usage (blue = slack, orange = near limit, red = at the ±1.5 mm stop).", width=3.6)
+
+    # ── §10 — Which Bound? ──────────────────────────────────────────────────
+    heading2(doc, "10 — Which Bound? Frictionless Self-Centring vs Stiction Walk")
+    body(doc, [
+        ("Which regime ITER occupies is decided by one comparison: the gravitational "
+         "restoring force that would recentre the vessel, versus the friction (stiction) "
+         "force that resists toroidal sliding at the supports.", False),
+    ])
+    table(doc, ["Quantity", "Value", "Basis"], [
+        ["Dead-weight axial force per VVGS (15° strut)", "≈ 10.2 MN", "(Mg/9)/cos 15°, M ≈ 9000 t"],
+        ["Toroidal breakaway (stiction) per support", "≈ 1.0 MN", "μ ≈ 0.1 × axial"],
+        ["Aggregate lateral breakaway (all 9, worst dir.)", "≈ 5.7 MN", "Σ μN |sin(θ−φ_i)|"],
+        ["Gravitational restoring at the ±1.5 mm stop", "≈ 4.1 kN", "K × 1.5 mm"],
+        ["Breakaway ÷ restoring", "≈ 1400×", "2–3 orders of magnitude"],
+    ])
+    callout(doc, "key", [
+        ("The gravitational restoring force (kN) is negligible against the toroidal breakaway "
+         "force (MN). The vessel does not self-centre. Once any load large enough to break "
+         "stiction (a disruption/VDE, §8) slides the supports, the vessel moves and stays "
+         "there — gravity cannot pull it back. Over many events the vessel ratchets / walks "
+         "through the polytope. The frictionless self-centring picture of §3–§6 is a lower "
+         "bound; the realistic operational envelope is the polytope width (§9), ≈ 3.1 mm at "
+         "worst.", False),
+    ], title="Stiction wins by ~1000×.")
+    figure(doc, os.path.join(DOCS, "plots", "two_bounds.png"),
+           "Left — the two metrics as distributions: departure-from-centre (blue, frictionless "
+           "lower bound) and polytope width (red, stiction-walk envelope). Right — the VV n = 1 "
+           "first-wall contribution under each regime against the 6 mm budget: frictionless "
+           "self-centred ≈ 0, but the realistic stiction-walk ceiling ≈ 3.1 mm consumes about "
+           "half the budget.")
+
+    # ── §11 — Thermal Cycling & the Overdetermined Structure ───────────────
+    heading2(doc, "11 — Thermal Cycling & the Statically-Overdetermined Structure")
+    body(doc, [
+        ("Does warming the vessel relax the nine stictions in a coordinated way that lets it "
+         "settle back to the gravitational centre? And what loads does an off-centre vessel "
+         "generate when heated, given that nine supports over-constrain a body with only "
+         "three in-plane freedoms?", False),
+    ])
+    heading3(doc, "Free radial breathing — large, but it does not recentre")
+    body(doc, [
+        ("For ΔT ≈ 78 K (22 → 100 °C) and 316L(N) α ≈ 16×10⁻⁶ K⁻¹, the support radius grows "
+         "by R_s·α·ΔT ≈ 12.5 mm (≈ 32 mm at the full 200 °C bake). This is the motion the "
+         "dual-hinge supports are designed to take: the dowels rotate, the radial growth is "
+         "free, and no toroidal slot demand or lateral load is generated — provided the "
+         "expansion is about the support-ring centre.", False),
+    ])
+    callout(doc, "key", [
+        ("If the vessel is off-centre by d, isotropic expansion about its centroid produces a "
+         "toroidal slot demand of only α·ΔT·|d| ≈ 3.7 µm (for d = 3 mm). The elastic force to "
+         "absorb such a micron-scale mismatch at a locked slot is a few kN — ~1000× below the "
+         "≈ 1 MN stiction. Heating neither unloads the supports (weight, hence stiction, is "
+         "temperature-independent) nor generates enough toroidal demand to slide them. An "
+         "off-centre vessel stays off-centre through thermal cycles; there is no coordinated "
+         "relaxation back to the gravitational centre.", False),
+    ], title="Thermal cycling does not break the stiction.")
+    heading3(doc, "Locked-in loads: uniform expansion is benign; asymmetry is the risk")
+    body(doc, [
+        ("Uniform isotropic expansion of an off-centre vessel maps exactly onto a "
+         "representable rigid-body shift, because δ_i^th = α·ΔT·(d·ê_t,i) = A[i,:]·(α·ΔT·d_x, "
+         "α·ΔT·d_y, 0). A demand lying in the column space of A is a rigid-body mode and "
+         "induces no self-stress (only the µm-scale take-up above if a slot is locked). So "
+         "uniform heating of a nominally symmetric vessel is benign.", False),
+    ])
+    body(doc, [
+        ("The genuine thermal risk is support-to-support asymmetry: non-uniform temperatures "
+         "(sector gradients, asymmetric baking, local heating) produce a toroidal demand "
+         "pattern that does not lie in the column space of A. That component cannot be relieved "
+         "by any rigid-body motion, so in a statically over-determined ring it is carried as a "
+         "self-equilibrating internal load set across the redundant supports — locked-in "
+         "toroidal dowel forces scaling with the differential expansion (α·ΔT·ΔR_support-to-"
+         "support), not with the mean temperature.", False),
+    ])
+    callout(doc, "warn", [
+        ("The dominant thermal lateral concern is not mean-temperature recentring (it does not "
+         "happen) but the locked-in self-stress from asymmetric thermal fields acting on a "
+         "stiction-locked, over-determined 9-support ring. A thermo-mechanical FE model with "
+         "realistic sector temperature spreads and the measured/assumed slot states is required "
+         "to size these internal loads and confirm they stay within the VVGS toroidal capacity.",
+         False),
+    ], title="Conjecture (needs FE confirmation).")
+
+    # ── §12 — Reliability of the Gap Distribution & Measurement ────────────
+    heading2(doc, "12 — Reliability of the Gap Distribution & the Case for Measurement")
+    body(doc, [
+        ("The statistics in §5–§6 rest on one weak assumption: that each support's offset is "
+         "an independent draw from Uniform(−1.5 mm, +1.5 mm). Neither part is justified — the "
+         "real gaps are the product of an assembly sequence, not a random process, and there "
+         "is no evidence the range is ±1.5 mm or the shape uniform. A different but equally "
+         "defensible prior moves the percentiles materially, so P95/P99 carry little weight.",
+         False),
+    ])
+    table(doc, ["Result", "Depends on the gap distribution?", "Confidence"], [
+        ["Nominal centred envelope (1.55 mm)", "No — geometry + slot", "HIGH"],
+        ["Polytope-width ceiling (3.09 mm)", "No — geometry + slot", "HIGH"],
+        ["Stiction ≫ centring (~1000×) & walk verdict", "No — force comparison", "HIGH"],
+        ["Thermal no-recentring verdict", "No — force comparison", "HIGH"],
+        ["MC percentiles (P95 = 2.27 mm, etc.)", "Yes — strongly", "LOW"],
+    ])
+    callout(doc, "ok", [
+        ("Because the conclusions that matter are distribution-free, and the only "
+         "distribution-dependent outputs are the unreliable percentiles, the highest-value "
+         "action is to measure the nine VVGS gaps directly with feeler gauges. Nine "
+         "measurements turn the problem into a deterministic kinematic calculation — the exact "
+         "polytope, its width, and the as-built offset of the vessel centre — with no prior to "
+         "defend. As the reviewer notes, this is also less effort than building and justifying "
+         "an input-uncertainty model. Each measured gap also tightens the conditional bound "
+         "(§6); nine collapse it entirely.", False),
+    ], title="Recommendation: measure, don't propagate.")
+
+    # ── §13 — The 6 mm n ≤ 4 First-Wall Budget ──────────────────────────────
+    heading2(doc, "13 — The 6 mm n ≤ 4 First-Wall Budget")
     body(doc, [
         ("The start-up heat-load criterion limits the peak-to-peak difference between the "
          "n ≤ 4 filtered first-wall profile and the n ≤ 4 filtered toroidal-field profile "
          "to ", False),
         ("≤ 6 mm", True),
-        (". The VV n = 1 lateral displacement, quantified in §5, is one contributor to the "
-         "first-wall side of this inequality:", False),
+        (". The VV n = 1 lateral displacement is one contributor — and the two bounds (§10) "
+         "give two very different answers:", False),
     ])
-    table(doc, ["Operating condition", "VV n = 1 contribution to the 6 mm budget"], [
-        ["Quiescent / between shots (no lateral load)", "≈ 0 mm (self-centred)"],
-        ["Start-up ramp (passive currents → wall follows TF)", "net reduces mismatch"],
-        ["Steady asymmetric thermal/EM loads", "F/K — sub-mm"],
-        ["Disruption transient (forced)", "up to gap (1.5 mm) + dynamic overshoot"],
-        ["Kinematic ceiling (worst random assembly, fully forced)", f"≈ {rmax:.2f} mm"],
+    table(doc, ["Picture", "VV n = 1 contribution to the 6 mm budget"], [
+        ["Frictionless self-centring — at rest, between shots", "≈ 0 mm"],
+        ["Start-up ramp (passive currents → wall follows TF)", "net reduces mismatch (kN, no slide)"],
+        ["From-centre kinematic worst (forced, frictionless)", f"≈ {rmax:.2f} mm"],
+        ["Stiction walk — realistic worst case (polytope width)", "≈ 3.1 mm"],
     ])
-    callout(doc, "info", [
-        ("Under nominal start-up conditions the VV n = 1 contribution is small and "
-         "favourable (it closes the misalignment). The remaining ~3–6 mm of the budget is "
-         "available for the toroidal-field side (mainly TF vault closure n ≤ 4) and any "
-         "other first-wall n ≤ 4 contributors.", False),
-    ])
+    callout(doc, "key", [
+        ("Because stiction prevents self-centring (§10), the vessel sits wherever it was last "
+         "driven, anywhere within the ±-width polytope, until the gaps are measured or the "
+         "supports are shimmed. The optimistic ≈ 0 mm (self-centred) value should not be "
+         "assumed for the budget. The remaining ~3 mm is what is then available for the "
+         "toroidal-field side (mainly TF vault closure n ≤ 4) and other first-wall "
+         "contributors — a materially tighter allocation than the self-centred picture implies.",
+         False),
+    ], title="The realistic VV n = 1 contribution is up to ≈ 3 mm — about half the 6 mm budget — not ≈ 0.")
+    callout(doc, "ok", [
+        ("Measuring the nine gaps (§12) removes the distribution uncertainty and quantifies "
+         "the as-built offset; shimming a support fixes its u_i and shrinks the reachable "
+         "polytope (§6), pulling the realistic contribution back toward the nominal envelope. "
+         "These are deterministic, low-effort levers — far more reliable than the unvalidated "
+         "statistical bound.", False),
+    ], title="How to recover budget.")
 
     # ── footer ──────────────────────────────────────────────────────────────
     foot = doc.add_paragraph()
     fr = foot.add_run(
-        "Author: Simon McIntosh. Monte Carlo data generated reproducibly by "
-        "vv_mc_generator.py (scipy HiGHS LP, max-lateral-displacement-from-centre metric, "
-        "N = 5000, fixed seed 20260527 → committed data/). Figures and animations by "
-        "vv_viz.py; displacements magnified ×500. Centring parameters: M ≈ 8000 t, 15° "
-        "inclined dual hinge → L_eff ≈ 26 m → K ≈ 3 kN/mm, T_n ≈ 10 s, F_stop ≈ 4.5 kN. "
-        "Every number regenerates from the repository. Source: Simon-McIntosh/vv."
+        "Author: Simon McIntosh. Monte-Carlo data generated reproducibly by "
+        "vv_mc_generator.py (scipy HiGHS LP, fixed seed 20260527 → committed data/). "
+        "Departure-from-centre and polytope-width figures/animations by vv_viz.py and "
+        "vv_rattle_figures.py; the stiction/thermal force ledger by vv_mechanics.py; "
+        "displacements magnified ×500. Geometry & centring (ITER VV Load Spec + mass table, "
+        "ITER_D_6TLUDY): R_s ≈ 10 m, M ≈ 9000 t, 15° inclined dual-hinge → L_eff ≈ 26–32 m → "
+        "K ≈ 2.7 kN/mm, T_n ≈ 11 s, F_stop ≈ 4.1 kN; per-VVGS dead-weight axial ≈ 10 MN, "
+        "toroidal breakaway ≈ 1 MN. Every number regenerates from the repository. "
+        "Source: Simon-McIntosh/vv."
     )
     fr.font.size = Pt(8); fr.font.color.rgb = GREY
 
