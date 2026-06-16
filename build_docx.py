@@ -356,12 +356,12 @@ def main():
     ], title="Consequence — in the frictionless idealisation.")
     figure(doc, os.path.join(DOCS, "diagrams", "D_rocking_pendulum.gif"),
            "The mechanism, on a side-on render of the ITER vacuum vessel. Each VVGS is a "
-           "dual-hinge / parallelogram 4-bar whose upper and lower bars are flat at the nominal "
-           "position, with the upper-bar pivot at the lower-port hole at the lower-left / "
-           "lower-right extents. The vessel rocks as a soft gravitational pendulum about its "
-           "virtual pivot P (far above, clipped out; the grey dashed line is the suspension "
-           "axis), ~1000× too weak to overcome the supports' dead-weight stiction (§10). Rock "
-           "exaggerated ~×400.", width=5.2)
+           "parallelogram 4-bar — a static horizontal floor and a horizontal coupler that attaches "
+           "to the vessel at the lower-port hole (lower-left / lower-right extents), joined by two "
+           "equal rigid links inclined 15° from vertical and leaning inward, whose axes coalesce "
+           "at the virtual pivot P (far above, clipped out). As the vessel rocks as a pendulum "
+           "about P the long links swing without changing length — ~1000× too weak to overcome "
+           "the supports' dead-weight stiction (§10). Rock exaggerated ~×400.", width=5.2)
 
     # ── §2 — Constraint Model, Polytope & Linear Programming ────────────────
     heading2(doc, "2 — Constraint Model, Polytope & Linear Programming")

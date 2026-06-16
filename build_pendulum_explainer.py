@@ -314,16 +314,20 @@ def _d(px, py_top):
     return np.array([float(px), _IMG_H - float(py_top)])
 
 
-# Virtual pivot P (far above the vessel, off-frame after the vertical clip), the
-# CoG, and the lower-port holes (keys: +1 = right/LR, -1 = left/LL). The vessel
-# rocks by a small rotation about P — exactly the pendulum of the original GIF;
-# here the blue blob is replaced by the ITER VV image. All in image-pixel data.
-_P      = _d(550, -1500)   # virtual pivot, well above the image top
-_COG    = _d(550, 392)
+# Lower-port holes (keys: +1 = right/LR, -1 = left/LL) — the upper-bar pivots.
+# The two support axes are inclined INCL_DEG (15°) from vertical, leaning inward,
+# and their extensions coalesce at the virtual pivot P (far above, off-frame).
+# The vessel rocks by a small rotation about P — the pendulum of the original GIF,
+# with the blue blob replaced by the ITER VV image. All in image-pixel data.
 _HOLES  = {+1: _d(1024, 666), -1: _d(76, 666)}
-_BAR_L  = 120.0           # flat-bar length (outboard to the support tower), px
-_BAR_GAP = 36.0           # vertical separation of the upper/lower bar, px
-_BETA0  = np.radians(0.75)  # exaggerated pendulum sway amplitude (about P)
+_BAR_L  = 92.0            # strut length (hole down to the ground hinge), px
+_BAR_A  = 30.0            # parallelogram width (perpendicular hinge spacing), px
+_BETA0  = np.radians(0.6)  # exaggerated pendulum rock amplitude (about P)
+
+# Virtual pivot P: the point on the machine axis where the two 15°-from-vertical
+# support axes converge (derived so each hole->P line is exactly INCL_DEG).
+_CX     = 0.5 * (_HOLES[+1][0] + _HOLES[-1][0])
+_P      = np.array([_CX, _HOLES[-1][1] + abs(_HOLES[-1][0] - _CX) / np.tan(np.radians(INCL_DEG))])
 
 
 def _rot(p, c, th):
@@ -336,57 +340,57 @@ def _draw_rocking_frame(ax, beta, img):
     ax.clear()
     ax.set_aspect("equal")
     ax.axis("off")
-    ax.set_xlim(-160, _IMG_W + 160)
+    ax.set_xlim(-40, _IMG_W + 40)
     ax.set_ylim(8, 756)       # vertical clip: vessel + linkages, P out of frame
 
     # ── ITER VV image, rocked about the virtual pivot P (the pendulum) ──
     im = ax.imshow(img, extent=(0, _IMG_W, 0, _IMG_H), origin="upper", zorder=2)
     im.set_transform(Affine2D().rotate_around(_P[0], _P[1], beta) + ax.transData)
 
-    # ── pendulum suspension axis (grey dashed): P → CoG, swings about P ──
-    cog = _rot(_COG, _P, beta)
-    d = cog - _P
-    far = cog + d / np.hypot(*d) * 360.0      # extend below the CoG along the rod
-    ax.plot([_P[0], far[0]], [_P[1], far[1]], color="#8a8a8a", lw=1.8,
-            ls=(0, (7, 5)), zorder=3)
-    ax.text(_COG[0] + 14, 742, "pendulum axis → P\n(above frame)", color="#777",
-            fontsize=8.2, ha="left", va="top", zorder=3)
-    ax.plot(cog[0], cog[1], marker="X", color="#cc2200", ms=11, zorder=8,
-            markeredgecolor="white", markeredgewidth=1.0)
-    ax.text(cog[0] + 16, cog[1], "CoG", color="#cc2200", fontsize=8.5,
-            ha="left", va="center", zorder=8)
-
-    # ── the two flat-bar VVGS dual-hinge 4-bar linkages ──
+    # ── the two VVGS parallelogram 4-bars ───────────────────────────────────
+    # Each is a parallelogram: a STATIC horizontal floor (bottom short side) and a
+    # horizontal coupler that connects to the VV (top short side), joined by two
+    # equal LONG links inclined 15° from vertical (leaning inward). The long links
+    # rock left/right about their fixed floor hinges as the VV swings — rigid, so
+    # they never change length. Their axes, extended, coalesce at the pivot P.
+    W = _BAR_A
     for s in (+1, -1):
         hole = _HOLES[s]
-        # vessel-side pivots (rotate with the vessel about P)
-        upV = _rot(hole, _P, beta)
-        loV = _rot(hole + np.array([0.0, -_BAR_GAP]), _P, beta)
-        # ground-side pivots (fixed foundation, outboard; flat bars at nominal)
-        upG = hole + np.array([s * _BAR_L, 0.0])
-        loG = upG + np.array([0.0, -_BAR_GAP])
+        u = _P - hole
+        u = u / np.hypot(*u)                       # link axis, 15° from vertical, inward
 
-        # fixed foundation block
-        ax.add_patch(mpatches.Rectangle((upG[0] - 9, loG[1] - 30),
-                                        18, _BAR_GAP + 44, facecolor="#d9d2c4",
-                                        edgecolor="#7a6f57", lw=1.0, zorder=4))
-        # ground block (vertical, connects the two fixed pivots)
-        ax.plot([upG[0], loG[0]], [upG[1], loG[1]], color="#555", lw=4.5,
-                solid_capstyle="round", zorder=5)
-        # vessel coupler block (vertical, on the vessel)
-        ax.plot([upV[0], loV[0]], [upV[1], loV[1]], color="#1e4d9b", lw=4.5,
-                solid_capstyle="round", zorder=6)
-        # the two parallel bars (upper + lower) — flat at nominal
-        ax.plot([upG[0], upV[0]], [upG[1], upV[1]], color="#1e4d9b", lw=3.4, zorder=6)
-        ax.plot([loG[0], loV[0]], [loG[1], loV[1]], color="#1e4d9b", lw=3.4, zorder=6)
-        # four hinge pins (ground = dark/fixed, vessel = red/moving)
-        for pt, mov in ((upG, 0), (loG, 0), (upV, 1), (loV, 1)):
-            ax.plot(pt[0], pt[1], "o", ms=7, zorder=7,
-                    color="#cc2200" if mov else "#333",
+        # faint dashed support-axis extension, up to the (off-frame) pivot P
+        holem = _rot(hole, _P, beta)
+        ax.plot([holem[0], _P[0]], [holem[1], _P[1]], color="#9a9a9a", lw=1.1,
+                ls=(0, (6, 5)), alpha=0.5, zorder=3)
+
+        floors, tops = [], []
+        for xo in (-W / 2.0, W / 2.0):
+            top_rest = hole + np.array([xo, 0.0])
+            floor = top_rest - _BAR_L * u          # FIXED floor hinge
+            attach = _rot(top_rest, _P, beta)      # VV-side attachment (moves)
+            dv = attach - floor
+            top = floor + _BAR_L * dv / np.hypot(*dv)   # rigid link: length == _BAR_L
+            floors.append(floor)
+            tops.append(top)
+            # long 15°-from-vertical link (the rocker)
+            ax.plot([floor[0], top[0]], [floor[1], top[1]], color="#1e4d9b",
+                    lw=3.8, zorder=6, solid_capstyle="round")
+
+        # static floor (bottom short side) + foundation hint
+        fc = 0.5 * (floors[0] + floors[1])
+        ax.add_patch(mpatches.Rectangle((fc[0] - W / 2 - 6, fc[1] - 13), W + 12, 13,
+                                        facecolor="#d9d2c4", edgecolor="#7a6f57",
+                                        lw=1.0, zorder=4))
+        ax.plot([floors[0][0], floors[1][0]], [floors[0][1], floors[1][1]],
+                color="#555", lw=5.0, solid_capstyle="round", zorder=5)
+        # moving coupler (top short side, connects to the VV)
+        ax.plot([tops[0][0], tops[1][0]], [tops[0][1], tops[1][1]],
+                color="#1e4d9b", lw=5.0, solid_capstyle="round", zorder=6)
+        # four hinge pins
+        for pt in floors + tops:
+            ax.plot(pt[0], pt[1], "o", ms=6, color="#222", zorder=7,
                     markeredgecolor="white", markeredgewidth=0.9)
-        if s < 0:
-            ax.text(upG[0] - 6, upG[1] + 34, "VVGS dual-hinge\n4-bar (bars flat\nat nominal)",
-                    color="#1a3a6e", fontsize=8.2, ha="left", va="bottom")
 
 
 def gif_rocking_pendulum(n_frames: int = 30, fps: int = 10, dpi: int = 70) -> str:
@@ -562,14 +566,14 @@ L<sub>eff</sub> to be long.</p>
 <figure>
   <img src="/vv/diagrams/D_rocking_pendulum.gif" alt="Side-on VV rocking on its 15-degree dual-hinge 4-bar supports">
   <figcaption><strong>Animation D.</strong> The mechanism in motion, on a side-on render of the
-  ITER vacuum vessel. Each VVGS is drawn as a <strong>dual-hinge / parallelogram 4-bar</strong>
-  whose upper and lower bars are <strong>flat (horizontal) in the nominal position</strong>; the
-  upper-bar pivot sits at the lower-port hole at the lower-left / lower-right extents of the
-  vessel. The vessel <strong>rocks as a gravitational pendulum about its virtual pivot P</strong>
-  (the strut-axis convergence point, far above and clipped out of frame — the grey dashed line is
-  the suspension axis), and the CoG (X) feels a restoring force toward the machine axis. The flat
-  bars articulate as the ports sway. <em>The rock is exaggerated ~×400 for visibility</em> — the
-  real at-rest excursion is sub-millimetre.</figcaption>
+  ITER vacuum vessel. Each VVGS is a <strong>parallelogram 4-bar</strong>: a static horizontal
+  floor and a horizontal coupler that attaches to the vessel at the lower-port hole (lower-left /
+  lower-right extents), joined by two equal rigid links <strong>inclined 15° from vertical</strong>
+  and leaning inward. As the vessel <strong>rocks as a gravitational pendulum about its virtual
+  pivot P</strong> — the point where the two support axes coalesce, far above and clipped out of
+  frame (faint dashed extensions) — the long links swing left and right without changing length.
+  <em>The rock is exaggerated ~×400 for visibility</em>; the real at-rest excursion is
+  sub-millimetre.</figcaption>
 </figure>
 
 <!-- ═══════════════════════════════════════════════════════════ §3 -->
