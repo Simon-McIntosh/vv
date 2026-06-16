@@ -324,10 +324,14 @@ _BAR_L  = 74.0            # strut length (hole down to the ground hinge), px
 _BAR_A  = 34.0            # parallelogram width (top/bottom short-side length), px
 _BETA0  = np.radians(0.6)  # exaggerated pendulum rock amplitude (about P)
 
-# Virtual pivot P: the point on the machine axis where the two 15°-from-vertical
-# support axes converge (derived so each hole->P line is exactly INCL_DEG).
-_CX     = 0.5 * (_HOLES[+1][0] + _HOLES[-1][0])
-_P      = np.array([_CX, _HOLES[-1][1] + abs(_HOLES[-1][0] - _CX) / np.tan(np.radians(INCL_DEG))])
+# Approximate geometric centre of the VV in the image (data coords).
+_VVC    = np.array([550.0, 398.0])
+# Virtual pivot P: on the vertical through the VV centre, at the height where the
+# two ~15°-from-vertical support axes converge — so the pendulum arm is vertical
+# at rest and the links visibly point at P.
+_avg_off = 0.5 * (abs(_HOLES[+1][0] - _VVC[0]) + abs(_HOLES[-1][0] - _VVC[0]))
+_avg_hy  = 0.5 * (_HOLES[+1][1] + _HOLES[-1][1])
+_P      = np.array([_VVC[0], _avg_hy + _avg_off / np.tan(np.radians(INCL_DEG))])
 
 
 def _rot(p, c, th):
@@ -336,33 +340,38 @@ def _rot(p, c, th):
     return c + np.array([co * d[0] - si * d[1], si * d[0] + co * d[1]])
 
 
-def _draw_rocking_frame(ax, beta, img):
+def _draw_rocking_frame(ax, beta, img, wide=False):
     ax.clear()
     ax.set_aspect("equal")
     ax.axis("off")
-    ax.set_xlim(-30, _IMG_W + 30)
-    ax.set_ylim(-14, 752)     # vertical clip: vessel + base linkages, P out of frame
+    if wide:
+        ax.set_xlim(-30, _IMG_W + 30)
+        ax.set_ylim(-30, _P[1] + 110)     # zoomed out: the virtual pivot P is in frame
+    else:
+        ax.set_xlim(-30, _IMG_W + 30)
+        ax.set_ylim(-14, 752)             # clipped: vessel + base linkages, P out of frame
 
     # ── ITER VV image, rocked about the virtual pivot P (the pendulum) ──
     im = ax.imshow(img, extent=(0, _IMG_W, 0, _IMG_H), origin="upper", zorder=2)
     im.set_transform(Affine2D().rotate_around(_P[0], _P[1], beta) + ax.transData)
-
-    # ── grey dashed pendulum arm: virtual pivot P → vessel, swings with the rock ──
-    hang = _rot(np.array([_CX, 420.0]), _P, beta)
-    ax.plot([_P[0], hang[0]], [_P[1], hang[1]], color="#8a8a8a", lw=1.8,
-            ls=(0, (7, 5)), zorder=5)
 
     # ── the two VVGS parallelogram 4-bars ───────────────────────────────────
     # Each is a parallelogram: a STATIC horizontal floor (bottom short side) and a
     # horizontal coupler that connects to the VV (top short side), joined by two
     # equal LONG links inclined 15° from vertical (leaning inward). The long links
     # rock left/right about their fixed floor hinges as the VV swings — rigid, so
-    # they never change length. One upper pivot sits on the lower-port base hole.
+    # they never change length. One upper pivot sits on the lower-port base hole;
+    # the link axes, extended (dashed), point at the virtual pivot P.
     W = _BAR_A
     for s in (+1, -1):
         hole = _HOLES[s]
         u = _P - hole
-        u = u / np.hypot(*u)                       # link axis, 15° from vertical, inward
+        u = u / np.hypot(*u)                       # link axis, ~15° from vertical, inward
+
+        # dashed support-axis extension along the link, up to the pivot P
+        holem = _rot(hole, _P, beta)
+        ax.plot([holem[0], _P[0]], [holem[1], _P[1]], color="#3a6ea5", lw=1.5,
+                ls=(0, (6, 5)), alpha=0.75, zorder=3)
 
         floors, tops = [], []
         for xo in (0.0, -s * W):                   # one top pivot ON the hole; other inboard
@@ -373,9 +382,9 @@ def _draw_rocking_frame(ax, beta, img):
             top = floor + _BAR_L * dv / np.hypot(*dv)   # rigid link: length == _BAR_L
             floors.append(floor)
             tops.append(top)
-            # long 15°-from-vertical link (the rocker)
+            # long ~15°-from-vertical link (the rocker) — strengthened
             ax.plot([floor[0], top[0]], [floor[1], top[1]], color="#1e4d9b",
-                    lw=3.8, zorder=6, solid_capstyle="round")
+                    lw=5.5, zorder=6, solid_capstyle="round")
 
         # static floor (bottom short side) + foundation hint
         fc = 0.5 * (floors[0] + floors[1])
@@ -383,43 +392,60 @@ def _draw_rocking_frame(ax, beta, img):
                                         facecolor="#d9d2c4", edgecolor="#7a6f57",
                                         lw=1.0, zorder=4))
         ax.plot([floors[0][0], floors[1][0]], [floors[0][1], floors[1][1]],
-                color="#555", lw=5.0, solid_capstyle="round", zorder=5)
+                color="#555", lw=6.0, solid_capstyle="round", zorder=5)
         # moving coupler (top short side, connects to the VV)
         ax.plot([tops[0][0], tops[1][0]], [tops[0][1], tops[1][1]],
-                color="#1e4d9b", lw=5.0, solid_capstyle="round", zorder=6)
+                color="#1e4d9b", lw=6.0, solid_capstyle="round", zorder=6)
         # four hinge pins
         for pt in floors + tops:
             ax.plot(pt[0], pt[1], "o", ms=6, color="#222", zorder=7,
                     markeredgecolor="white", markeredgewidth=0.9)
 
+    # ── solid pendulum arm: virtual pivot P → large dot at the VV centre ──
+    vc = _rot(_VVC, _P, beta)
+    ax.plot([_P[0], vc[0]], [_P[1], vc[1]], color="#222", lw=2.8, zorder=8)
+    ax.plot(vc[0], vc[1], "o", ms=18, color="#1a3a6e", zorder=9,
+            markeredgecolor="white", markeredgewidth=1.6)
+    if wide:
+        # highlight the virtual pivot where all the axes coalesce
+        ax.plot(_P[0], _P[1], "o", ms=22, color="#cc2200", zorder=9,
+                markeredgecolor="white", markeredgewidth=1.8)
 
-def gif_rocking_pendulum(n_frames: int = 30, fps: int = 10, dpi: int = 70) -> str:
-    """Animate the ITER VV image rocking as a gravitational pendulum on its two
-    flat-bar VVGS 4-bar linkages. Rock exaggerated ~×400 for visibility."""
+
+def gif_rocking_pendulum(n_frames: int = 30, fps: int = 10, dpi: int = 70) -> dict:
+    """Render two rocking GIFs: the CLIPPED view (vessel + base linkages, pivot P
+    out of frame) and a ZOOMED-OUT view showing the virtual pivot P where the
+    support axes and pendulum arm coalesce. Rock exaggerated ~×400 for visibility."""
     img = plt.imread(_VV_IMG)
     phase = np.linspace(0, 2 * np.pi, n_frames, endpoint=False)
     thetas = _BETA0 * np.sin(phase)
+    specs = [
+        ("D_rocking_pendulum.gif",      (9.0, 6.6), dpi, False),
+        ("D_rocking_pendulum_wide.gif", (5.4, 9.4), 80,  True),
+    ]
+    outs = {}
+    for name, figsize, dpiw, wide in specs:
+        fig, ax = plt.subplots(figsize=figsize, facecolor="white")
+        fig.subplots_adjust(left=0.01, right=0.99, top=0.99, bottom=0.01)
 
-    fig, ax = plt.subplots(figsize=(9.0, 6.6), facecolor="white")
-    fig.subplots_adjust(left=0.01, right=0.99, top=0.99, bottom=0.01)
+        def draw(k, wide=wide):
+            _draw_rocking_frame(ax, thetas[k], img, wide=wide)
 
-    def draw(k):
-        _draw_rocking_frame(ax, thetas[k], img)
-
-    anim = FuncAnimation(fig, draw, frames=n_frames, interval=1000 // fps)
-    out = os.path.join(DIAGRAMS_DIR, "D_rocking_pendulum.gif")
-    anim.save(out, writer="pillow", fps=fps, dpi=dpi)
-    plt.close(fig)
-    return out
+        anim = FuncAnimation(fig, draw, frames=n_frames, interval=1000 // fps)
+        out = os.path.join(DIAGRAMS_DIR, name)
+        anim.save(out, writer="pillow", fps=fps, dpi=dpiw)
+        plt.close(fig)
+        outs["wide" if wide else "clipped"] = out
+    return outs
 
 
 def preview_rocking(out="/tmp/rocking_preview.png") -> str:
-    """5-frame strip for visual QA (not committed)."""
+    """Side-by-side clipped + wide nominal frames for visual QA (not committed)."""
     img = plt.imread(_VV_IMG)
-    fig, axes = plt.subplots(1, 5, figsize=(34, 6.6), facecolor="white")
-    for ax, th in zip(axes, np.linspace(-_BETA0, _BETA0, 5)):
-        _draw_rocking_frame(ax, th, img)
-    fig.savefig(out, dpi=72, bbox_inches="tight", facecolor="white")
+    fig, axes = plt.subplots(1, 2, figsize=(20, 9.4), facecolor="white")
+    _draw_rocking_frame(axes[0], _BETA0, img, wide=False)
+    _draw_rocking_frame(axes[1], _BETA0, img, wide=True)
+    fig.savefig(out, dpi=80, bbox_inches="tight", facecolor="white")
     plt.close(fig)
     return out
 
@@ -573,7 +599,17 @@ L<sub>eff</sub> to be long.</p>
   pivot P</strong> — the point where the two support axes coalesce, far above and clipped out of
   frame (faint dashed extensions) — the long links swing left and right without changing length.
   <em>The rock is exaggerated ~×400 for visibility</em>; the real at-rest excursion is
-  sub-millimetre.</figcaption>
+  sub-millimetre. Animation E zooms out to show where P actually sits.</figcaption>
+</figure>
+
+<figure>
+  <img src="/vv/diagrams/D_rocking_pendulum_wide.gif" alt="Zoomed-out view showing the virtual pivot P">
+  <figcaption><strong>Animation E.</strong> The same rock, zoomed out. The solid pendulum arm
+  and the two dashed support-axis extensions all converge on the <strong>virtual pivot P</strong>
+  (red dot) high above the machine — the point from which the vessel effectively hangs; the large
+  dark dot marks the VV geometric centre. The great height of P
+  (L<sub>eff</sub> ≈ {L15:.0f} m) is what makes the pendulum so soft (K ≈ {K15:.1f} kN/mm,
+  T<sub>n</sub> ≈ {T15:.0f} s).</figcaption>
 </figure>
 
 <!-- ═══════════════════════════════════════════════════════════ §3 -->

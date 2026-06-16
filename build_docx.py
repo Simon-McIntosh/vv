@@ -362,6 +362,12 @@ def main():
            "at the virtual pivot P (far above, clipped out). As the vessel rocks as a pendulum "
            "about P the long links swing without changing length — ~1000× too weak to overcome "
            "the supports' dead-weight stiction (§10). Rock exaggerated ~×400.", width=5.2)
+    figure(doc, os.path.join(DOCS, "diagrams", "D_rocking_pendulum_wide.gif"),
+           "The same rock, zoomed out: the solid pendulum arm and the two dashed support-axis "
+           "extensions converge on the virtual pivot P (red dot) high above the machine — the "
+           "point from which the vessel effectively hangs (the dark dot marks the VV geometric "
+           "centre). Its height (L_eff ≈ 26–32 m) is why the centring is soft (K ≈ 2.7 kN/mm, "
+           "T_n ≈ 11 s).", width=3.0)
 
     # ── §2 — Constraint Model, Polytope & Linear Programming ────────────────
     heading2(doc, "2 — Constraint Model, Polytope & Linear Programming")
