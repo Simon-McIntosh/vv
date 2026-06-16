@@ -351,9 +351,17 @@ def _draw_rocking_frame(ax, beta, img, wide=False):
         ax.set_xlim(-30, _IMG_W + 30)
         ax.set_ylim(-14, 752)             # clipped: vessel + base linkages, P out of frame
 
-    # ── ITER VV image, rocked about the virtual pivot P (the pendulum) ──
-    im = ax.imshow(img, extent=(0, _IMG_W, 0, _IMG_H), origin="upper", zorder=2)
-    im.set_transform(Affine2D().rotate_around(_P[0], _P[1], beta) + ax.transData)
+    # ── ITER VV image, swaying with the pendulum ──
+    # The pendulum swing about the far pivot P is, at this amplitude, an almost
+    # pure HORIZONTAL translation: the vertical rise (~0.08 px) and the tilt
+    # (~0.6°) are both sub-pixel. Driving the image by a pure horizontal shift
+    # (rather than a rotation) keeps the vertical pixel grid fixed, so the vessel
+    # sways smoothly instead of snapping ±1 px vertically between frames (the
+    # "bounce"). The linkages and pendulum arm still rotate exactly about P.
+    dx = float(_rot(_VVC, _P, beta)[0] - _VVC[0])      # horizontal sway of the VV centre
+    im = ax.imshow(img, extent=(0, _IMG_W, 0, _IMG_H), origin="upper", zorder=2,
+                   interpolation="lanczos", interpolation_stage="rgba")
+    im.set_transform(Affine2D().translate(dx, 0.0) + ax.transData)
 
     # ── the two VVGS parallelogram 4-bars ───────────────────────────────────
     # Each is a parallelogram: a STATIC horizontal floor (bottom short side) and a
