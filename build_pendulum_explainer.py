@@ -18,6 +18,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from matplotlib.animation import FuncAnimation
 from matplotlib.transforms import Affine2D
+from PIL import Image
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DIAGRAMS_DIR = os.path.join(HERE, "docs", "diagrams")
@@ -322,7 +323,7 @@ def _d(px, py_top):
 _HOLES  = {+1: _d(1028, 694), -1: _d(40, 692)}   # lower-port holes at the base
 _BAR_L  = 74.0            # strut length (hole down to the ground hinge), px
 _BAR_A  = 34.0            # parallelogram width (top/bottom short-side length), px
-_BETA0  = np.radians(0.6)  # exaggerated pendulum rock amplitude (about P)
+_BETA0  = np.radians(1.4)  # exaggerated pendulum rock amplitude (about P) — clearly visible swing
 
 # Approximate geometric centre of the VV in the image (data coords).
 _VVC    = np.array([550.0, 398.0])
@@ -351,17 +352,14 @@ def _draw_rocking_frame(ax, beta, img, wide=False):
         ax.set_xlim(-30, _IMG_W + 30)
         ax.set_ylim(-14, 752)             # clipped: vessel + base linkages, P out of frame
 
-    # ── ITER VV image, swaying with the pendulum ──
-    # The pendulum swing about the far pivot P is, at this amplitude, an almost
-    # pure HORIZONTAL translation: the vertical rise (~0.08 px) and the tilt
-    # (~0.6°) are both sub-pixel. Driving the image by a pure horizontal shift
-    # (rather than a rotation) keeps the vertical pixel grid fixed, so the vessel
-    # sways smoothly instead of snapping ±1 px vertically between frames (the
-    # "bounce"). The linkages and pendulum arm still rotate exactly about P.
-    dx = float(_rot(_VVC, _P, beta)[0] - _VVC[0])      # horizontal sway of the VV centre
+    # ── ITER VV image, rocked about the virtual pivot P (the pendulum) ──
+    # The vessel genuinely rotates about P (it rocks AND sways). Smooth rendering
+    # of the sub-pixel rotation comes from supersampling in gif_rocking_pendulum
+    # (render ×2, downscale with a smooth filter) — this removes the ±1 px raster
+    # "bounce" without faking the motion. lanczos resampling helps further.
     im = ax.imshow(img, extent=(0, _IMG_W, 0, _IMG_H), origin="upper", zorder=2,
                    interpolation="lanczos", interpolation_stage="rgba")
-    im.set_transform(Affine2D().translate(dx, 0.0) + ax.transData)
+    im.set_transform(Affine2D().rotate_around(_P[0], _P[1], beta) + ax.transData)
 
     # ── the two VVGS parallelogram 4-bars ───────────────────────────────────
     # Each is a parallelogram: a STATIC horizontal floor (bottom short side) and a
@@ -427,22 +425,28 @@ def gif_rocking_pendulum(n_frames: int = 30, fps: int = 10, dpi: int = 70) -> di
     img = plt.imread(_VV_IMG)
     phase = np.linspace(0, 2 * np.pi, n_frames, endpoint=False)
     thetas = _BETA0 * np.sin(phase)
+    SS = 2   # supersample factor: render ×2, downscale with a smooth filter so the
+             # sub-pixel rotation does not snap ±1 px ("bounce") between frames
     specs = [
         ("D_rocking_pendulum.gif",      (9.0, 6.6), dpi, False),
         ("D_rocking_pendulum_wide.gif", (5.4, 9.4), 80,  True),
     ]
     outs = {}
     for name, figsize, dpiw, wide in specs:
-        fig, ax = plt.subplots(figsize=figsize, facecolor="white")
+        fig, ax = plt.subplots(figsize=figsize, dpi=dpiw * SS, facecolor="white")
         fig.subplots_adjust(left=0.01, right=0.99, top=0.99, bottom=0.01)
-
-        def draw(k, wide=wide):
+        pil_frames, target = [], None
+        for k in range(n_frames):
             _draw_rocking_frame(ax, thetas[k], img, wide=wide)
-
-        anim = FuncAnimation(fig, draw, frames=n_frames, interval=1000 // fps)
-        out = os.path.join(DIAGRAMS_DIR, name)
-        anim.save(out, writer="pillow", fps=fps, dpi=dpiw)
+            fig.canvas.draw()
+            pim = Image.fromarray(np.asarray(fig.canvas.buffer_rgba())).convert("RGB")
+            if target is None:
+                target = (pim.width // SS, pim.height // SS)
+            pil_frames.append(pim.resize(target, Image.LANCZOS))
         plt.close(fig)
+        out = os.path.join(DIAGRAMS_DIR, name)
+        pil_frames[0].save(out, save_all=True, append_images=pil_frames[1:],
+                           duration=int(round(1000 / fps)), loop=0, optimize=True)
         outs["wide" if wide else "clipped"] = out
     return outs
 
