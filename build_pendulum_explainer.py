@@ -323,7 +323,7 @@ def _d(px, py_top):
 _HOLES  = {+1: _d(1028, 694), -1: _d(40, 692)}   # lower-port holes at the base
 _BAR_L  = 74.0            # strut length (hole down to the ground hinge), px
 _BAR_A  = 34.0            # parallelogram width (top/bottom short-side length), px
-_BETA0  = np.radians(1.4)  # exaggerated pendulum rock amplitude (about P) — clearly visible swing
+_BETA0  = np.radians(0.8)  # exaggerated pendulum rock amplitude (about P)
 
 # Approximate geometric centre of the VV in the image (data coords).
 _VVC    = np.array([550.0, 398.0])
@@ -418,13 +418,16 @@ def _draw_rocking_frame(ax, beta, img, wide=False):
                 markeredgecolor="white", markeredgewidth=1.8)
 
 
-def gif_rocking_pendulum(n_frames: int = 30, fps: int = 10, dpi: int = 70) -> dict:
+def gif_rocking_pendulum(n_frames: int = 50, period_s: float = 11.0,
+                         dpi: int = 70) -> dict:
     """Render two rocking GIFs: the CLIPPED view (vessel + base linkages, pivot P
     out of frame) and a ZOOMED-OUT view showing the virtual pivot P where the
-    support axes and pendulum arm coalesce. Rock exaggerated ~×400 for visibility."""
+    support axes and pendulum arm coalesce. One full rock cycle lasts period_s
+    (= the VV's natural pendulum period, ≈ 11 s). Rock exaggerated ~×400."""
     img = plt.imread(_VV_IMG)
     phase = np.linspace(0, 2 * np.pi, n_frames, endpoint=False)
     thetas = _BETA0 * np.sin(phase)
+    duration = int(round(period_s * 1000.0 / n_frames))   # ms per frame -> 11 s/cycle
     SS = 2   # supersample factor: render ×2, downscale with a smooth filter so the
              # sub-pixel rotation does not snap ±1 px ("bounce") between frames
     specs = [
@@ -444,9 +447,14 @@ def gif_rocking_pendulum(n_frames: int = 30, fps: int = 10, dpi: int = 70) -> di
                 target = (pim.width // SS, pim.height // SS)
             pil_frames.append(pim.resize(target, Image.LANCZOS))
         plt.close(fig)
+        # one shared adaptive palette keeps the file small at the higher frame count;
+        # FS dither keeps every frame distinct so none are dropped (which would
+        # shorten the period) at the slow-moving swing extremes
+        pal = pil_frames[0].quantize(colors=128, method=Image.MEDIANCUT)
+        q = [f.quantize(palette=pal, dither=Image.FLOYDSTEINBERG) for f in pil_frames]
         out = os.path.join(DIAGRAMS_DIR, name)
-        pil_frames[0].save(out, save_all=True, append_images=pil_frames[1:],
-                           duration=int(round(1000 / fps)), loop=0, optimize=True)
+        q[0].save(out, save_all=True, append_images=q[1:], duration=duration,
+                  loop=0, optimize=True, disposal=1)
         outs["wide" if wide else "clipped"] = out
     return outs
 
