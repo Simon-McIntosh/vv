@@ -319,9 +319,9 @@ def _d(px, py_top):
 # and their extensions coalesce at the virtual pivot P (far above, off-frame).
 # The vessel rocks by a small rotation about P — the pendulum of the original GIF,
 # with the blue blob replaced by the ITER VV image. All in image-pixel data.
-_HOLES  = {+1: _d(1024, 666), -1: _d(76, 666)}
-_BAR_L  = 92.0            # strut length (hole down to the ground hinge), px
-_BAR_A  = 30.0            # parallelogram width (perpendicular hinge spacing), px
+_HOLES  = {+1: _d(1028, 694), -1: _d(40, 692)}   # lower-port holes at the base
+_BAR_L  = 74.0            # strut length (hole down to the ground hinge), px
+_BAR_A  = 34.0            # parallelogram width (top/bottom short-side length), px
 _BETA0  = np.radians(0.6)  # exaggerated pendulum rock amplitude (about P)
 
 # Virtual pivot P: the point on the machine axis where the two 15°-from-vertical
@@ -340,32 +340,32 @@ def _draw_rocking_frame(ax, beta, img):
     ax.clear()
     ax.set_aspect("equal")
     ax.axis("off")
-    ax.set_xlim(-40, _IMG_W + 40)
-    ax.set_ylim(8, 756)       # vertical clip: vessel + linkages, P out of frame
+    ax.set_xlim(-30, _IMG_W + 30)
+    ax.set_ylim(-14, 752)     # vertical clip: vessel + base linkages, P out of frame
 
     # ── ITER VV image, rocked about the virtual pivot P (the pendulum) ──
     im = ax.imshow(img, extent=(0, _IMG_W, 0, _IMG_H), origin="upper", zorder=2)
     im.set_transform(Affine2D().rotate_around(_P[0], _P[1], beta) + ax.transData)
+
+    # ── grey dashed pendulum arm: virtual pivot P → vessel, swings with the rock ──
+    hang = _rot(np.array([_CX, 420.0]), _P, beta)
+    ax.plot([_P[0], hang[0]], [_P[1], hang[1]], color="#8a8a8a", lw=1.8,
+            ls=(0, (7, 5)), zorder=5)
 
     # ── the two VVGS parallelogram 4-bars ───────────────────────────────────
     # Each is a parallelogram: a STATIC horizontal floor (bottom short side) and a
     # horizontal coupler that connects to the VV (top short side), joined by two
     # equal LONG links inclined 15° from vertical (leaning inward). The long links
     # rock left/right about their fixed floor hinges as the VV swings — rigid, so
-    # they never change length. Their axes, extended, coalesce at the pivot P.
+    # they never change length. One upper pivot sits on the lower-port base hole.
     W = _BAR_A
     for s in (+1, -1):
         hole = _HOLES[s]
         u = _P - hole
         u = u / np.hypot(*u)                       # link axis, 15° from vertical, inward
 
-        # faint dashed support-axis extension, up to the (off-frame) pivot P
-        holem = _rot(hole, _P, beta)
-        ax.plot([holem[0], _P[0]], [holem[1], _P[1]], color="#9a9a9a", lw=1.1,
-                ls=(0, (6, 5)), alpha=0.5, zorder=3)
-
         floors, tops = [], []
-        for xo in (-W / 2.0, W / 2.0):
+        for xo in (0.0, -s * W):                   # one top pivot ON the hole; other inboard
             top_rest = hole + np.array([xo, 0.0])
             floor = top_rest - _BAR_L * u          # FIXED floor hinge
             attach = _rot(top_rest, _P, beta)      # VV-side attachment (moves)
